@@ -138,6 +138,7 @@ class RepFile(object):
                     child = ts[ts.iter_nth_child(main_iter,k)]
                     fpath = child[0]
                     fn = files[k]
+                    #TODO: Deal with unicode problem
                     assert fn.fpath.decode(errors='surrogateescape') == fpath, 'files out of order in treestore'
                     child[2] = fn.marked
                 main_iter = ts.iter_next(main_iter)
@@ -417,18 +418,18 @@ class UI(object):
         self.repeated_filter.set_visible_func(self.repeated_visible)
         self.left_sort = Gtk.TreeModelSort(self.repeated_filter)
         self.tv_left = Gtk.TreeView(self.left_sort)
+        renderer = Gtk.CellRendererText()
+        col = Gtk.TreeViewColumn('Size',renderer,text = 1)
+        col.set_cell_data_func(renderer,col_human,1)
+        col.set_sort_column_id(1)
+        self.left_sort_col = col
+        self.tv_left.append_column(col)
         renderer = Gtk.CellRendererToggle()
         renderer.connect('toggled',self.on_left_toggled)
         col = Gtk.TreeViewColumn('Delete',renderer,active=2)
         self.tv_left.append_column(col)
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn('Repeated files',renderer,text=0)
-        self.tv_left.append_column(col)
-        renderer = Gtk.CellRendererText()
-        col = Gtk.TreeViewColumn('Size',renderer,text = 1)
-        col.set_cell_data_func(renderer,col_human,1)
-        col.set_sort_column_id(1)
-        self.left_sort_col = col
         self.tv_left.append_column(col)
         self.tv_left.connect('row-activated',self.activated_repeated_tree)
         scrol  = self.builder.get_object('scrolled_left')
