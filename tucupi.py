@@ -494,6 +494,8 @@ class UI(object):
         self.fs_list_store = store
         
     def repeated_visible(self,model,miter,data = None):
+        """Filter to show only repeated files in currently shown tree."""
+        
         if self.show_all:
             return True
         else:
@@ -503,6 +505,7 @@ class UI(object):
             return key in self.shown_keys
     
     def left_conv_to_path(self,path):
+        """Retrieve path in original model after sort and filter models.""" 
         if type(path) is str:
             path = Gtk.TreePath(path)
         cpath = self.left_sort.convert_path_to_child_path(path)
@@ -511,6 +514,7 @@ class UI(object):
 
 
     def open(self,widget,*args):
+        """Open widget to select a folder to scan."""
         self.open_diag = Gtk.FileChooserDialog('Select a folder', self.win,
                 Gtk.FileChooserAction.SELECT_FOLDER,
                 (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
@@ -524,6 +528,7 @@ class UI(object):
         
         
     def scan_path(self):
+        """Instanciate and start finder class, add check_finder to timeout."""
         path = self.open_diag.get_filename()
         self.shown_path = path
         self.finder_thr = Finder(path)
@@ -532,6 +537,7 @@ class UI(object):
         self.path = path
     
     def check_finder(self):
+        """Timeout function, call make_fstree when finder thread finishes."""
         if self.finder_thr.is_alive(): 
             return True
         else:
@@ -543,6 +549,13 @@ class UI(object):
         
         
     def compute_md5list(self):
+        """Compute list of files to perform md5sum.
+        
+        Files with the same size are added from largest to smallest. If 
+        empty files are present, they are added directly to the repeated
+        files dictionary. Add a timeout function to control and check
+        the progress of md5sum computation. 
+        """
         for s in sorted(self.same_size,reverse=True):
             for fn in self.sizes[s]:
                 if s > 0 and fn not in self.md5_todo:
@@ -555,8 +568,14 @@ class UI(object):
         return False
     
     def check_md5_progress(self):
+        """Timeout function. Check and control computation of md5sum.
+        
+        Create and start thread to compute md5sum. Periodically check 
+        thread status recreating, starting and stoping it if necessary.
+        Perform bookeeping of md5sums already computed.
+        """
         if self.md5_thr is None:
-            #Thread not yet started. Create one if work to do
+            #Thread not yet started. Create one if we have work to do
             if len(self.md5_todo) > 0 and not self.stop:
                 assert len(self.md5_working) == 0, 'working md5 list not empty'
                 #Process larger files first
@@ -598,17 +617,21 @@ class UI(object):
                 return False
 
     def update_repeated(self):
+        """Append to model repeated files recently found."""
         self.rep_files.append_to_model(self.repeated_tree_store)
     
     def update_path(self):
+        """Show a new path in the right pane."""
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.copy_to_model(self.fs_list_store)
         self.shown_keys = branch.get_keys()
         self.repeated_filter.refilter()
+        #TODO: Deal with unicode error
         self.path_label.set_label('Location: {}'.format(self.shown_path))
         
 
     def activated_repeated_tree(self,treeview,treepath,col):
+        """Callback. Expand or collapse main row, show path in the right pane."""
         #sp = treepath.split(':')
         if  treepath.get_depth() == 1:
             #Main row
@@ -617,6 +640,7 @@ class UI(object):
             else:
                 treeview.expand_row(treepath,False)
         else:
+            #TODO: Deal with utf error
             treepath = self.left_conv_to_path(treepath)
             fname = self.repeated_tree_store[treepath][0]
             sp = fname.rpartition('/')
@@ -625,8 +649,10 @@ class UI(object):
         
     
     def activated_fstree(self,widget,treepath,col):
+        """Callback. Select a new folder to show."""
         titer = self.fs_list_store.get_iter(treepath)
         if self.fs_list_store[titer][0] == 'folder':
+            #TODO: Deal with utf error
             self.shown_path = self.shown_path + '/' +self.fs_list_store[titer][1]
             self.update_path()
             
@@ -635,6 +661,7 @@ class UI(object):
         if tpath.get_depth() == 2:
             main_row = self.repeated_tree_store[tpath[0]]
             key = (main_row[1],main_row[0].encode(errors='surrogateescape'))
+            #TODO: Deal with utf error
             fn  = self.rep_files.getfn(key,self.repeated_tree_store[tpath][0].encode(errors='surrogateescape'))
             success = self.rep_files.toggle_mark(key,fn)
             if success:
