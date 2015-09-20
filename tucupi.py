@@ -211,7 +211,7 @@ class RepFile(object):
                                 ff = xmldoc.createElement('deleted')
                             else:
                                 ff = xmldoc.createElement('kept')
-                            fpath = xmldoc.createTextNode(fn.fpath.decode(errors='surrogateescape'))
+                            fpath = xmldoc.createTextNode(fn.fpath.decode(errors='replace'))
                             ff.appendChild(fpath)
                             f.appendChild(ff)
                         root.appendChild(f)
