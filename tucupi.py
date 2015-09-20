@@ -225,24 +225,29 @@ class RepFile(object):
 
 
 class FSTree(object):
-    def __init__(self):
+    def __init__(self,path = b''):
         self.branches = {}
         self.leaves = {}
+        self.path = path
+        self.shown = None
         self.aggr_attrib = np.zeros((5,),dtype = np.int64)
         
     def add_leaf(self,leaf_path,leaf_attib):
-        p = leaf_path.partition('/')
-        if p[1] == '': 
+        p = leaf_path.partition(b'/')
+        if p[1] == b'': 
             #Leaf
             if p[0] not in self.leaves:
                 self.leaves[p[0]] = leaf_attib
                 return True
             else:
                 return False
+        elif len(p[0]) == 0:
+            #root node
+            return self.add_leaf(p[2],leaf_attib)
         else:
             assert len(p[2]) >0, 'Empty leaf inserted'
             if p[0] not in self.branches:
-                self.branches[p[0]] = FSTree()
+                self.branches[p[0]] = FSTree(path = self.path + b'/' + p[0])
             return self.branches[p[0]].add_leaf(p[2],leaf_attib)
 
     
@@ -258,34 +263,50 @@ class FSTree(object):
             
             
     def get_branch(self,branch_path):
-        p = branch_path.partition('/')
-        if p[1] == '' or p[2] == '': 
+        p = branch_path.partition(b'/')
+        if  len(p[0]) == 0:
+            #root node
+            return self.get_branch(p[2])
+        elif p[1] == b'' or p[2] == b'': 
             return self.branches[p[0]]
-            
+        
         else:
             return self.branches[p[0]].get_branch(p[2])
 
     def get_leaf(self,leaf_path):
-        p = leaf_path.partition('/')
-        if p[1] == '': 
+        p = leaf_path.partition(b'/')
+        if  len(p[0]) == 0:
+            #root node
+            return self.get_leaf(p[2])
+        elif p[1] == b'': 
             #Leaf
             return self.leaves[p[0]]
         else:
             assert len(p[2]) >0, 'Trying to get an empty leaf'
             return self.branches[p[0]].get_leaf(p[2])
 
+    def get_index(self,ind):
+        return self.shown[ind]
+
     
     def copy_to_model(self,list_store):
         ncol = list_store.get_n_columns
         list_store.clear()
+        self.shown = []
+        ind = 0
         for br_name,br in self.branches.items():
-            row = ['folder', br_name]
+            row = ['folder', br_name.decode(errors='replace')]
             row.extend(br.aggr_attrib.tolist())
+            row.append(ind)
             list_store.append(row)
+            self.shown.append(br)
+            ind = ind +1
         for lf_name,att in self.leaves.items():
-            row = ['gtk-file',lf_name]
-            row.extend([ 1, att.size ,int(att.repeated),int(att.repeated)*att.size,int(att.marked)])
+            row = ['gtk-file',lf_name.decode(errors='replace')]
+            row.extend([ 1, att.size ,int(att.repeated),int(att.repeated)*att.size,int(att.marked),ind])
             list_store.append(row)
+            self.shown.append(att)
+            ind = ind + 1
     
     def get_keys(self,keys = None):
         if keys is None:
@@ -345,7 +366,7 @@ def make_fstree(find_output, tree_root, sizes , same_size):
         resp = k.partition(b' ')
         s = int(resp[0])
         file_node = FNode(resp[2],s)
-        if tree_root.add_leaf(resp[2].decode(errors='surrogateescape'),file_node):
+        if tree_root.add_leaf(resp[2],file_node):
             #Ignore a file already added
             if s in sizes:
                 sizes[s].append(file_node)
@@ -444,7 +465,7 @@ class UI(object):
 
         
     def init_right_tree(self):
-        store = Gtk.ListStore(str, str, int,GObject.TYPE_INT64, int,GObject.TYPE_INT64,int)
+        store = Gtk.ListStore(str, str, int,GObject.TYPE_INT64, int,GObject.TYPE_INT64,int,int)
         
         tree = Gtk.TreeView(store)
 
@@ -530,7 +551,8 @@ class UI(object):
     def scan_path(self):
         """Instanciate and start finder class, add check_finder to timeout."""
         path = self.open_diag.get_filename()
-        self.shown_path = path
+        #TODO: Temporary solution to utf errors
+        self.shown_path = path.encode()
         self.finder_thr = Finder(path)
         self.finder_thr.start()
         GObject.timeout_add(100,self.check_finder)
@@ -627,7 +649,7 @@ class UI(object):
         self.shown_keys = branch.get_keys()
         self.repeated_filter.refilter()
         #TODO: Deal with unicode error
-        self.path_label.set_label('Location: {}'.format(self.shown_path))
+        self.path_label.set_label('Location: {}'.format(self.shown_path.decode(errors='replace')))
         
 
     def activated_repeated_tree(self,treeview,treepath,col):
@@ -652,8 +674,9 @@ class UI(object):
         """Callback. Select a new folder to show."""
         titer = self.fs_list_store.get_iter(treepath)
         if self.fs_list_store[titer][0] == 'folder':
-            #TODO: Deal with utf error
-            self.shown_path = self.shown_path + '/' +self.fs_list_store[titer][1]
+            ind = self.fs_list_store[titer][-1]
+            branch = self.fstree_root.get_branch(self.shown_path)
+            self.shown_path = branch.get_index(ind).path
             self.update_path()
             
     def on_left_toggled(self,widget,tpath):
@@ -669,8 +692,8 @@ class UI(object):
             
                 
     def up(self,widget,*args):
-        paths = self.shown_path.rpartition('/')
-        if paths[1] != '' and paths[2] != '':
+        paths = self.shown_path.rpartition(b'/')
+        if paths[1] != b'' and paths[2] != b'':
             self.shown_path = paths[0]
             self.update_path() 
 
@@ -692,11 +715,12 @@ class UI(object):
         model,selection = self.selection_right.get_selected_rows()
         for titer in selection:
             if self.fs_list_store[titer][0] == 'folder':
-                branch = self.fstree_root.get_branch(self.shown_path+'/'+self.fs_list_store[titer][1])
+                ind = self.fs_list_store[titer][-1]
+                branch = self.fstree_root.get_branch(self.shown_path).get_index(ind)
                 branch.mark_all(self.rep_files)
             if self.fs_list_store[titer][0] == 'gtk-file':
-                fpath = self.shown_path+'/'+self.fs_list_store[titer][1]
-                fn = self.fstree_root.get_leaf(fpath)
+                ind = self.fs_list_store[titer][-1]
+                fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
                 fn.mark(self.rep_files)
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
@@ -710,11 +734,12 @@ class UI(object):
         model,selection = self.selection_right.get_selected_rows()
         for titer in selection:
             if self.fs_list_store[titer][0] == 'folder':
-                branch = self.fstree_root.get_branch(self.shown_path+'/'+self.fs_list_store[titer][1])
+                ind = self.fs_list_store[titer][-1]
+                branch = self.fstree_root.get_branch(self.shown_path).get_index(ind)
                 branch.unmark_all()
             if self.fs_list_store[titer][0] == 'gtk-file':
-                fpath = self.shown_path+'/'+self.fs_list_store[titer][1]
-                fn = self.fstree_root.get_leaf(fpath)
+                ind = self.fs_list_store[titer][-1]
+                fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
                 fn.marked = False
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
