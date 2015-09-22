@@ -89,8 +89,7 @@ class FNode(object):
     
     def mark(self,rep_file):
         if not self.marked and self.repeated:
-            key = (self.size,self.md5)
-            rep_file.toggle_mark(key,self)
+            rep_file.toggle_mark(self)
 
 
 class RepFile(object):
@@ -98,6 +97,7 @@ class RepFile(object):
         self.lock = threading.Lock()
         self.size_md5 = {}
         self.repeated = set()
+        self.ts_contents = []
         
     def add_fn(self,fn):
         if fn.md5 is None:
@@ -130,7 +130,7 @@ class RepFile(object):
             main_iter = ts.get_iter_first()
             while main_iter != None:
                 main_row = ts[main_iter]
-                key = (main_row[1], main_row[0].encode(errors='surrogateescape'))
+                key = self.ts_contents[main_row[-1]]
                 files = self.size_md5[key]
                 nchildren = ts.iter_n_children(main_iter)
                 assert len(files) == nchildren, 'different number of files in treestore'
@@ -138,43 +138,44 @@ class RepFile(object):
                     child = ts[ts.iter_nth_child(main_iter,k)]
                     fpath = child[0]
                     fn = files[k]
-                    #TODO: Deal with unicode problem
-                    assert fn.fpath.decode(errors='surrogateescape') == fpath, 'files out of order in treestore'
+                    assert k == child[-1], 'files out of order in treestore'
                     child[2] = fn.marked
                 main_iter = ts.iter_next(main_iter)
             
     
     def append_to_model(self,ts):
-        keys_copied = set()
         with self.lock:
             main_iter = ts.get_iter_first()
             while main_iter != None:
                 main_row = ts[main_iter]
-                key = (main_row[1], main_row[0].encode(errors='surrogateescape'))
+                key = self.ts_contents[main_row[-1]]
                 files = self.size_md5[key]
                 nchildren = ts.iter_n_children(main_iter)
                 for k in range(len(files)-nchildren):
                     f = files[nchildren+k]
-                    ts.append(main_iter,[f.fpath.decode(errors='surrogateescape'), files[0].size, f.marked])
+                    ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,nchildren+k])
                 
-                keys_copied.add(key)
                 main_iter = ts.iter_next(main_iter)
             
-            for k in self.repeated:
-                if k not in keys_copied:
-                    files = self.size_md5[k]
-                    main_row = ts.append(None,[files[0].md5.decode(errors='surrogateescape'), files[0].size ,False])
-                    for f in files:
-                        ts.append(main_row,[f.fpath.decode(errors='surrogateescape'), files[0].size, f.marked])
+            copied = set(self.ts_contents)
+            for k in self.repeated - copied:
+                files = self.size_md5[k]
+                self.ts_contents.append(k)
+                main_row = ts.append(None,[k[1].decode(errors='replace'), k[0] ,False,len(self.ts_contents) -1 ])
+                for kk, f in enumerate(files):
+                    ts.append(main_row,[f.fpath.decode(errors='replace'), files[0].size, f.marked,kk])
     
-    def getfn(self,key,fpath):
+    def getfn(self,ts,tpath):
+        assert tpath.get_depth() == 2, 'tree path not from a file'
         with self.lock:
-            for fn in self.size_md5[key]:
-                if fn.fpath == fpath:
-                    return fn
-        raise ValueError('file node not found ({})'.format(fpath))
+            main_row = ts[tpath[0]]
+            key = self.ts_contents[main_row[-1]]
+            files = self.size_md5[key]
+            child = ts[tpath]
+            return files[child[-1]]
     
-    def toggle_mark(self,key,fn):
+    def toggle_mark(self,fn):
+        key = (fn.size,fn.md5)
         fl = self.size_md5[key]
         ind = fl.index(fn)
         if fn.marked:
@@ -204,7 +205,7 @@ class RepFile(object):
                         size = xmldoc.createAttribute('size')
                         size.value = str(key[0])
                         md5 = xmldoc.createAttribute('md5')
-                        md5.value = key[1].decode(errors='surrogateescape')
+                        md5.value = key[1].decode(errors='replace')
                         f.setAttributeNode(md5)
                         f.setAttributeNode(size)
                         for fn in fn_list:
@@ -432,7 +433,7 @@ class UI(object):
     
 
     def init_left_tree(self):
-        ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool)
+        ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool,int)
         
         
         self.repeated_filter = ts.filter_new()
@@ -648,7 +649,6 @@ class UI(object):
         branch.copy_to_model(self.fs_list_store)
         self.shown_keys = branch.get_keys()
         self.repeated_filter.refilter()
-        #TODO: Deal with unicode error
         self.path_label.set_label('Location: {}'.format(self.shown_path.decode(errors='replace')))
         
 
@@ -662,10 +662,10 @@ class UI(object):
             else:
                 treeview.expand_row(treepath,False)
         else:
-            #TODO: Deal with utf error
             treepath = self.left_conv_to_path(treepath)
-            fname = self.repeated_tree_store[treepath][0]
-            sp = fname.rpartition('/')
+            fn = self.rep_files.getfn(self.repeated_tree_store,treepath)
+            fname = fn.fpath
+            sp = fname.rpartition(b'/')
             self.shown_path = sp[0]
             self.update_path()
         
@@ -682,11 +682,8 @@ class UI(object):
     def on_left_toggled(self,widget,tpath):
         tpath = self.left_conv_to_path(tpath)
         if tpath.get_depth() == 2:
-            main_row = self.repeated_tree_store[tpath[0]]
-            key = (main_row[1],main_row[0].encode(errors='surrogateescape'))
-            #TODO: Deal with utf error
-            fn  = self.rep_files.getfn(key,self.repeated_tree_store[tpath][0].encode(errors='surrogateescape'))
-            success = self.rep_files.toggle_mark(key,fn)
+            fn  = self.rep_files.getfn(self.repeated_tree_store,tpath)
+            success = self.rep_files.toggle_mark(fn)
             if success:
                 self.repeated_tree_store[tpath][2] = fn.marked
             
