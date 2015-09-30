@@ -558,14 +558,17 @@ class UI(object):
         self.finder_thr.start()
         GObject.timeout_add(100,self.check_finder)
         self.path = path
+        print('Scanning path',path)
     
     def check_finder(self):
         """Timeout function, call make_fstree when finder thread finishes."""
         if self.finder_thr.is_alive(): 
             return True
         else:
+            print('Find process finished. Building file tree...')
             self.finder_result = self.finder_thr.result
             make_fstree(self.finder_result,self.fstree_root,self.sizes,self.same_size)
+            print('File tree completed.')
             self.update_path()
             self.compute_md5list()
             return False
