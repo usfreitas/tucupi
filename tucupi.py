@@ -316,7 +316,8 @@ class FSTree(object):
         for br in self.branches.values():
             br.get_keys(keys)
         for fn in self.leaves.values():
-            keys.add((fn.size,fn.md5))
+            if fn.md5 is not None:
+                keys.add((fn.size,fn.md5))
         return keys
         
     def mark_all(self,rep_file):
@@ -570,7 +571,9 @@ class UI(object):
             make_fstree(self.finder_result,self.fstree_root,self.sizes,self.same_size)
             print('File tree completed.')
             self.update_path()
+            print('update_path completed')
             self.compute_md5list()
+            print('compute_md5list returned')
             return False
         
         
@@ -584,7 +587,8 @@ class UI(object):
         """
         for s in sorted(self.same_size,reverse=True):
             for fn in self.sizes[s]:
-                if s > 0 and fn not in self.md5_todo:
+                #if s > 0 and fn not in self.md5_todo:
+                if s > 0:
                     self.md5_todo.append(fn)
         if 0 in self.sizes:
             self.rep_files.add_empty(self.sizes[0])
@@ -650,7 +654,10 @@ class UI(object):
         """Show a new path in the right pane."""
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.copy_to_model(self.fs_list_store)
-        self.shown_keys = branch.get_keys()
+        if not self.show_all:
+            self.shown_keys = branch.get_keys()
+        else:
+            self.show_keys = set()
         self.repeated_filter.refilter()
         self.path_label.set_label('Location: {}'.format(self.shown_path.decode(errors='replace')))
         
