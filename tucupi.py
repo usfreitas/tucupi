@@ -174,7 +174,7 @@ class RepFile(object):
                     nchildren = ts.iter_n_children(main_iter)
                     for k in range(len(files)-nchildren):
                         f = files[nchildren+k]
-                        ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,nchildren+k])
+                        ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,False,nchildren+k])
                 
                 main_iter = ts.iter_next(main_iter)
             
@@ -183,6 +183,7 @@ class RepFile(object):
                 files = self.size_md5[k]
                 self.ts_contents.append(k)
                 main_row = ts.append(None,[k[1].decode(errors='replace'), k[0] ,False,False, len(self.ts_contents) -1 ])
+        print('append_to_model lock released')
     
     def getfn(self,ts,tpath):
         assert tpath.get_depth() == 2, 'tree path not from a file'
@@ -434,6 +435,7 @@ class UI(object):
         self.scale.set_range(1.,42.)
         self.scale.set_value(42)
         self.max_filesize = 2**int(self.scale.get_value())
+        self.pbar = self.builder.get_object('progressbar')
         
         self.open_diag = None
         self.finder_result = None
@@ -588,6 +590,7 @@ class UI(object):
     def check_finder(self):
         """Timeout function, call make_fstree when finder thread finishes."""
         if self.finder_thr.is_alive(): 
+            self.pbar.pulse()
             return True
         else:
             print('Find process finished. Building file tree...')
@@ -598,6 +601,7 @@ class UI(object):
             print('update_path completed')
             self.compute_md5list()
             print('compute_md5list returned')
+            self.pbar.set_fraction(0.0)
             return False
         
         
@@ -635,6 +639,8 @@ class UI(object):
                 
                 self.md5_working.extend([fn for fn in self.md5_todo if fn.size <= self.max_filesize])
                 self.md5_working.sort(key=lambda x:x.size,reverse=True)#This is COOL!
+                sizes = np.array([fn.size for fn in self.md5_working],dtype=np.int64)
+                self.progress = sizes.cumsum().astype(float)/sizes.sum()
                 self.md5_todo.clear()
 
                 self.md5_thr = threading.Thread(target= compute_md5, args = (self.md5_working,self.rep_files))
@@ -648,7 +654,9 @@ class UI(object):
             if not self.stop:
                 #Thread still running. Come back later
                 self.update_repeated()
-                print('Still {} files to process'.format(len(self.md5_working)))
+                yet = len(self.md5_working)
+                self.pbar.set_fraction(self.progress[-yet])
+                print('Still {} files to process'.format(yet))
                 return True
             else:
                 #We must stop
