@@ -156,6 +156,12 @@ class RepFile(object):
         main_row[3] = True
         for kk, f in enumerate(files):
             ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,False,kk])
+
+    def is_processed(self,ind):
+        key = self.ts_contents[ind]
+        files = self.size_md5[key]
+        unmarked = [fn for fn in files if not fn.marked]
+        return len(unmarked) == 1
     
     def append_to_model(self,ts):
         with self.lock:
@@ -714,6 +720,12 @@ class UI(object):
             success = self.rep_files.toggle_mark(fn)
             if success:
                 self.repeated_tree_store[tpath][2] = fn.marked
+                main_row = self.repeated_tree_store[tpath[0]]
+                if self.rep_files.is_processed(main_row[-1]):
+                    main_row[2] = True
+                else:
+                    main_row[2] = False
+                
             
                 
     def up(self,widget,*args):
