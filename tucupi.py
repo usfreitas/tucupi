@@ -43,7 +43,7 @@ class DelOutput(object):
 del_out = DelOutput()
 
 
-def human_size(s):
+def human_size(s,precision = 2):
     s = int(s)
     negative = False
     if s < 0: negative = True
@@ -54,7 +54,7 @@ def human_size(s):
     bin_prefix = ['', 'Ki', 'Mi', 'Gi', 'Ti', 'Pi', 'Ei', 'Zi', 'Yi']
     pre_val = min(pre_val, 8)
     if pre_val > 0:
-        return '{0:.2f}{1}B'.format(s/(1024**pre_val),bin_prefix[pre_val])
+        return '{0:.{prec}f}{1}B'.format(s/(1024**pre_val),bin_prefix[pre_val], prec = precision)
     else:
         return '{0}B'.format(s)
 
@@ -430,6 +430,11 @@ class UI(object):
         self.hbox = self.builder.get_object('hbox')
         self.path_label = self.builder.get_object('path_label')
         self.popup_menu = self.builder.get_object('popup_menu')
+        self.scale = self.builder.get_object('scale')
+        self.scale.set_range(1.,42.)
+        self.scale.set_value(42)
+        self.max_filesize = 2**int(self.scale.get_value())
+        
         self.open_diag = None
         self.finder_result = None
         self.fstree_root = FSTree()
@@ -606,8 +611,7 @@ class UI(object):
         """
         for s in sorted(self.same_size,reverse=True):
             for fn in self.sizes[s]:
-                #if s > 0 and fn not in self.md5_todo:
-                if s > 0:
+                if s > 0 and s < self.max_filesize:
                     self.md5_todo.append(fn)
         if 0 in self.sizes:
             self.rep_files.add_empty(self.sizes[0])
@@ -628,8 +632,9 @@ class UI(object):
             if len(self.md5_todo) > 0 and not self.stop:
                 assert len(self.md5_working) == 0, 'working md5 list not empty'
                 #Process larger files first
-                self.md5_todo.sort(key=lambda x:x.size,reverse=True)#This is COOL!
-                self.md5_working.extend(self.md5_todo)
+                
+                self.md5_working.extend([fn for fn in self.md5_todo if fn.size <= self.max_filesize])
+                self.md5_working.sort(key=lambda x:x.size,reverse=True)#This is COOL!
                 self.md5_todo.clear()
 
                 self.md5_thr = threading.Thread(target= compute_md5, args = (self.md5_working,self.rep_files))
@@ -783,6 +788,13 @@ class UI(object):
 
         self.rep_files.update_model(self.repeated_tree_store)
         self.update_path()
+
+    def on_format_value(self,scale,value):
+        return human_size(2**value,precision = 0)
+        
+    def on_scale_value_changed(self,rg):
+        self.max_filesize = 2**int(self.scale.get_value())
+
     
     def right_button_press(self,widget,event,data=None):
         if event.button == 3:
