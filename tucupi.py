@@ -137,29 +137,38 @@ class RepFile(object):
                 if len(unmarked) == 1:
                     main_row[2] = True
                 else:
-                    main_row = False
-                
-                nchildren = ts.iter_n_children(main_iter)
-                assert len(files) == nchildren, 'different number of files in treestore'
-                for k in range(nchildren):
-                    child = ts[ts.iter_nth_child(main_iter,k)]
-                    fn = files[k]
-                    assert k == child[-1], 'files out of order in treestore'
-                    child[2] = fn.marked
+                    main_row[2] = False
+                if main_row[3]:
+                    nchildren = ts.iter_n_children(main_iter)
+                    assert len(files) == nchildren, 'different number of files in treestore'
+                    for k in range(nchildren):
+                        child = ts[ts.iter_nth_child(main_iter,k)]
+                        fn = files[k]
+                        assert k == child[-1], 'files out of order in treestore'
+                        child[2] = fn.marked
                 main_iter = ts.iter_next(main_iter)
             
+    def add_children(self,ts,tpath):
+        main_row = ts[tpath]
+        main_iter = ts.get_iter(tpath)
+        key = self.ts_contents[main_row[-1]]
+        files = self.size_md5[key]
+        main_row[3] = True
+        for kk, f in enumerate(files):
+            ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,False,kk])
     
     def append_to_model(self,ts):
         with self.lock:
             main_iter = ts.get_iter_first()
             while main_iter != None:
                 main_row = ts[main_iter]
-                key = self.ts_contents[main_row[-1]]
-                files = self.size_md5[key]
-                nchildren = ts.iter_n_children(main_iter)
-                for k in range(len(files)-nchildren):
-                    f = files[nchildren+k]
-                    ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,nchildren+k])
+                if main_row[3]:
+                    key = self.ts_contents[main_row[-1]]
+                    files = self.size_md5[key]
+                    nchildren = ts.iter_n_children(main_iter)
+                    for k in range(len(files)-nchildren):
+                        f = files[nchildren+k]
+                        ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,nchildren+k])
                 
                 main_iter = ts.iter_next(main_iter)
             
@@ -167,9 +176,7 @@ class RepFile(object):
             for k in self.repeated - copied:
                 files = self.size_md5[k]
                 self.ts_contents.append(k)
-                main_row = ts.append(None,[k[1].decode(errors='replace'), k[0] ,False,len(self.ts_contents) -1 ])
-                for kk, f in enumerate(files):
-                    ts.append(main_row,[f.fpath.decode(errors='replace'), files[0].size, f.marked,kk])
+                main_row = ts.append(None,[k[1].decode(errors='replace'), k[0] ,False,False, len(self.ts_contents) -1 ])
     
     def getfn(self,ts,tpath):
         assert tpath.get_depth() == 2, 'tree path not from a file'
@@ -440,7 +447,7 @@ class UI(object):
     
 
     def init_left_tree(self):
-        ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool,int)
+        ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool,bool,int)
         
         
         self.repeated_filter = ts.filter_new()
@@ -673,7 +680,12 @@ class UI(object):
         #sp = treepath.split(':')
         if  treepath.get_depth() == 1:
             #Main row
-            if treeview.row_expanded(treepath):
+            orig_tpath = self.left_conv_to_path(treepath)
+            row = self.repeated_tree_store[orig_tpath]
+            if not row[3]:
+                self.rep_files.add_children(self.repeated_tree_store,orig_tpath)
+                treeview.expand_row(treepath,False)
+            elif treeview.row_expanded(treepath):
                 treeview.collapse_row(treepath)
             else:
                 treeview.expand_row(treepath,False)
