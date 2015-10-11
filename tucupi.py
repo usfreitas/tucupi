@@ -127,16 +127,22 @@ class RepFile(object):
     def update_model(self,ts):
         assert len(ts) == len(self.repeated), 'different number of rows in treestore'
         with self.lock:
+            print('update_model')
             main_iter = ts.get_iter_first()
             while main_iter != None:
                 main_row = ts[main_iter]
                 key = self.ts_contents[main_row[-1]]
                 files = self.size_md5[key]
+                unmarked = [fn for fn in files if not fn.marked]
+                if len(unmarked) == 1:
+                    main_row[2] = True
+                else:
+                    main_row = False
+                
                 nchildren = ts.iter_n_children(main_iter)
                 assert len(files) == nchildren, 'different number of files in treestore'
                 for k in range(nchildren):
                     child = ts[ts.iter_nth_child(main_iter,k)]
-                    fpath = child[0]
                     fn = files[k]
                     assert k == child[-1], 'files out of order in treestore'
                     child[2] = fn.marked
