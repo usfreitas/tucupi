@@ -21,7 +21,6 @@ import threading
 
 from gi.repository import Gtk,GObject,GLib
 
-import time
 import sys
 import subprocess as sb
 import numpy as np
@@ -688,9 +687,9 @@ class UI(object):
         branch.copy_to_model(self.fs_list_store)
         if not self.show_all:
             self.shown_keys = branch.get_keys()
+            self.repeated_filter.refilter()
         else:
             self.show_keys = set()
-        self.repeated_filter.refilter()
         self.path_label.set_label('Location: {}'.format(self.shown_path.decode(errors='replace')))
         
 
