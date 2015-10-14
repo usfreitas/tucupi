@@ -429,6 +429,7 @@ class UI(object):
         self.win = self.builder.get_object('main_window')
         self.hbox = self.builder.get_object('hbox')
         self.path_label = self.builder.get_object('path_label')
+        self.files_label = self.builder.get_object('files_label')
         self.popup_menu = self.builder.get_object('popup_menu')
         self.scale = self.builder.get_object('scale')
         self.scale.set_range(1.,42.)
@@ -833,6 +834,12 @@ class UI(object):
 
     def forward(self,widget,*args):
         self.rep_files.to_xmlfile('temp.xml')
+        
+    def on_previous(self,widget,*args):
+        pass
+
+    def on_next(self,widget,*args):
+        pass
 
     def quit(self,widget,*args):
         diag = Gtk.Dialog( "Realy Quit?", self.win, 0,
