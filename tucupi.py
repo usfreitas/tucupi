@@ -92,11 +92,13 @@ class FNode(object):
 
 
 class RepFile(object):
-    def __init__(self):
+    def __init__(self,pagesize=100):
         self.lock = threading.Lock()
         self.size_md5 = {}
         self.repeated = set()
         self.ts_contents = []
+        self.pagesize = pagesize
+        self.page = 0
         
     def add_fn(self,fn):
         if fn.md5 is None:
@@ -123,38 +125,84 @@ class RepFile(object):
                 fn.md5 = key[1]
                 fn.repeated = True
 
-    def update_model(self,ts):
-        assert len(ts) == len(self.repeated), 'different number of rows in treestore'
+    def update_model(self,ts,page=None):
+        if page is None:
+            page = self.page
+
+
+        nrows = 0 #number of main rows in ts already copied or updated
+        
         with self.lock:
-            print('update_model')
-            main_iter = ts.get_iter_first()
-            while main_iter != None:
-                main_row = ts[main_iter]
-                key = self.ts_contents[main_row[-1]]
+            if page == self.page:
+            #Updating present page view
+                main_iter = ts.get_iter_first()
+                while main_iter != None:
+                    main_row = ts[main_iter]
+                    key = self.ts_contents[main_row[-1]]
+                    files = self.size_md5[key]
+                    unmarked = [fn for fn in files if not fn.marked]
+                    allmarked = len(unmarked) == 1
+                    if allmarked != main_row[2]:
+                        #Only update when necessary
+                        main_row[2] = allmarked
+                        
+                    if main_row[3]: #If the row has children
+                        nchildren = ts.iter_n_children(main_iter)
+                        nfiles = len(files)
+                        for k in range(nchildren):
+                            child = ts[ts.iter_nth_child(main_iter,k)]
+                            fn = files[k]
+                            assert k == child[-1], 'files out of order in treestore'
+                            if child[2] != fn.marked:
+                                child[2] = fn.marked
+                        for k in range(nfiles-nchildren):
+                            #Append new children if necessary
+                            self._append_child(ts,main_iter,files[k+nchildren],k+nchildren)
+
+                    nrows += 1 #row was processed
+                    main_iter = ts.iter_next(main_iter)
+
+
+            npages = math.ceil(len(self.repeated)/self.pagesize)
+            if page >= npages or page < 0:
+                #invalid page, return
+                return (self.page,npages,len(self.repeated))
+
+            if page != self.page:
+                #showing a different page, clear model and internal list
+                nrows = 0
+                self.page = page
+                self.ts_contents.clear()
+                ts.clear()
+
+            sorted_keys = sorted(self.repeated, reverse=True)
+            sorted_keys = sorted_keys[self.page*self.pagesize:(self.page+1)*self.pagesize]
+            while nrows < min(self.pagesize,len(sorted_keys)):
+                #append missing rows (could be all of them)
+                key = sorted_keys[nrows]
+                self.ts_contents.append(key)
                 files = self.size_md5[key]
                 unmarked = [fn for fn in files if not fn.marked]
-                if len(unmarked) == 1:
-                    main_row[2] = True
-                else:
-                    main_row[2] = False
-                if main_row[3]:
-                    nchildren = ts.iter_n_children(main_iter)
-                    assert len(files) == nchildren, 'different number of files in treestore'
-                    for k in range(nchildren):
-                        child = ts[ts.iter_nth_child(main_iter,k)]
-                        fn = files[k]
-                        assert k == child[-1], 'files out of order in treestore'
-                        child[2] = fn.marked
-                main_iter = ts.iter_next(main_iter)
-            
+                allmarked = len(unmarked) == 1
+                row = [key[1].decode(errors='replace'), key[0] ,allmarked,False, len(self.ts_contents) -1 ]
+                ts.append(None,row)
+                nrows += 1
+
+        return (self.page,npages,len(self.repeated))
+    
+    def _append_child(self,ts,main_iter,fn,index):
+        """This function should only be called from inside a with lock block"""
+        ts.append(main_iter,[fn.fpath.decode(errors='replace'), fn.size, fn.marked,False,index])
+        
     def add_children(self,ts,tpath):
         main_row = ts[tpath]
         main_iter = ts.get_iter(tpath)
         key = self.ts_contents[main_row[-1]]
         files = self.size_md5[key]
         main_row[3] = True
-        for kk, f in enumerate(files):
-            ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,False,kk])
+        with self.lock:
+            for kk, f in enumerate(files):
+                self._append_child(ts,main_iter,f,kk)
 
     def is_processed(self,ind):
         key = self.ts_contents[ind]
@@ -430,6 +478,7 @@ class UI(object):
         self.hbox = self.builder.get_object('hbox')
         self.path_label = self.builder.get_object('path_label')
         self.files_label = self.builder.get_object('files_label')
+        self.page = 0
         self.popup_menu = self.builder.get_object('popup_menu')
         self.scale = self.builder.get_object('scale')
         self.scale.set_range(1.,42.)
@@ -680,7 +729,9 @@ class UI(object):
 
     def update_repeated(self):
         """Append to model repeated files recently found."""
-        self.rep_files.append_to_model(self.repeated_tree_store)
+        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store)
+        self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
+        self.page = page
     
     def update_path(self):
         """Show a new path in the right pane."""
@@ -836,10 +887,15 @@ class UI(object):
         self.rep_files.to_xmlfile('temp.xml')
         
     def on_previous(self,widget,*args):
-        pass
+        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,self.page-1)
+        self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
+        self.page = page
 
     def on_next(self,widget,*args):
-        pass
+        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,self.page+1)
+        self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
+        self.page = page
+
 
     def quit(self,widget,*args):
         diag = Gtk.Dialog( "Realy Quit?", self.win, 0,
