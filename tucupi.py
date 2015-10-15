@@ -130,7 +130,6 @@ class RepFile(object):
             page = self.page
 
 
-        nrows = 0 #number of main rows in ts already copied or updated
         
         with self.lock:
             if page == self.page:
@@ -159,7 +158,6 @@ class RepFile(object):
                             #Append new children if necessary
                             self._append_child(ts,main_iter,files[k+nchildren],k+nchildren)
 
-                    nrows += 1 #row was processed
                     main_iter = ts.iter_next(main_iter)
 
 
@@ -170,24 +168,21 @@ class RepFile(object):
 
             if page != self.page:
                 #showing a different page, clear model and internal list
-                nrows = 0
                 self.page = page
                 self.ts_contents.clear()
                 ts.clear()
 
             sorted_keys = sorted(self.repeated, reverse=True)
             sorted_keys = sorted_keys[self.page*self.pagesize:(self.page+1)*self.pagesize]
-            while nrows < min(self.pagesize,len(sorted_keys)):
+            sorted_keys = sorted(set(sorted_keys)-set(self.ts_contents),reverse=True)
+            for key in sorted_keys:
                 #append missing rows (could be all of them)
-                key = sorted_keys[nrows]
                 self.ts_contents.append(key)
                 files = self.size_md5[key]
                 unmarked = [fn for fn in files if not fn.marked]
                 allmarked = len(unmarked) == 1
                 row = [key[1].decode(errors='replace'), key[0] ,allmarked,False, len(self.ts_contents) -1 ]
                 ts.append(None,row)
-                nrows += 1
-
         return (self.page,npages,len(self.repeated))
     
     def _append_child(self,ts,main_iter,fn,index):
