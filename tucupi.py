@@ -329,7 +329,11 @@ class FSTree(object):
         p = branch_path.partition(b'/')
         if  len(p[0]) == 0:
             #root node
-            return self.get_branch(p[2])
+            if p[1] == b'/':
+                return self.get_branch(p[2])
+            else:
+                return self
+                
         elif p[1] == b'' or p[2] == b'': 
             return self.branches[p[0]]
         
