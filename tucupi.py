@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-#Copyright 2015 Ubiratan S. Freitas
+#Copyright 2015,2016 Ubiratan S. Freitas
 #This program is free software: you can redistribute it and/or modify
 #it under the terms of the GNU General Public License as published by
 #the Free Software Foundation, either version 3 of the License, or
@@ -43,6 +43,7 @@ del_out = DelOutput()
 
 
 def human_size(s,precision = 2):
+    """Return a string representing the size in the smallest binary prefix."""
     s = int(s)
     negative = False
     if s < 0: negative = True
@@ -79,6 +80,7 @@ class Finder(threading.Thread):
 
 
 class FNode(object):
+    """Class to hold file specific data and state."""
     def __init__(self,fpath,size):
         self.fpath = fpath
         self.md5 = None
@@ -87,11 +89,15 @@ class FNode(object):
         self.repeated = False
     
     def mark(self,rep_file):
+        """Mark itself to be deleted."""
         if not self.marked and self.repeated:
             rep_file.toggle_mark(self)
 
 
 class RepFile(object):
+    """Class holding the list of repeated files. It decides if a file
+    is repeated, controls which files are marked for deletion, and 
+    set up data for the repeated files' TreeView."""
     def __init__(self,pagesize=100):
         self.lock = threading.Lock()
         self.size_md5 = {}
@@ -101,6 +107,8 @@ class RepFile(object):
         self.page = 0
         
     def add_fn(self,fn):
+        """Add a file node to the list, decide if it is repeated, and 
+        update the list of repeated files."""
         if fn.md5 is None:
             raise ValueError('md5sum not present')
         key = (fn.size,fn.md5)
@@ -113,10 +121,14 @@ class RepFile(object):
                 self.size_md5[key].append(fn)
                 self.repeated.add(key)
                 if len(self.size_md5[key]) == 2:
+                    #If this is the second file added, the fist one with
+                    #this size and md5 is also repeated and should be 
+                    #marked as so
                     self.size_md5[key][0].repeated = True
         
 
     def add_empty(self,empty_files):
+        """Add list of empty files to the repeated files."""
         with self.lock:
             key = (0, b'empty_file')
             self.repeated.add(key)
@@ -126,10 +138,10 @@ class RepFile(object):
                 fn.repeated = True
 
     def update_model(self,ts,page=None):
+        """Update TreeStore data. Responsible for adding new data and
+        for changing the page shown."""
         if page is None:
             page = self.page
-
-
         
         with self.lock:
             if page == self.page:
@@ -172,8 +184,11 @@ class RepFile(object):
                 self.ts_contents.clear()
                 ts.clear()
 
+            #Sort all repeated files from largest downward
             sorted_keys = sorted(self.repeated, reverse=True)
+            #Select files from this page
             sorted_keys = sorted_keys[self.page*self.pagesize:(self.page+1)*self.pagesize]
+            #Find files not yet in the TreeStore
             sorted_keys = sorted(set(sorted_keys)-set(self.ts_contents),reverse=True)
             for key in sorted_keys:
                 #append missing rows (could be all of them)
@@ -190,6 +205,7 @@ class RepFile(object):
         ts.append(main_iter,[fn.fpath.decode(errors='replace'), fn.size, fn.marked,False,index])
         
     def add_children(self,ts,tpath):
+        """Add the children of a row in TreeStore"""
         main_row = ts[tpath]
         main_iter = ts.get_iter(tpath)
         key = self.ts_contents[main_row[-1]]
@@ -239,7 +255,7 @@ class RepFile(object):
     def toggle_mark(self,fn):
         key = (fn.size,fn.md5)
         fl = self.size_md5[key]
-        ind = fl.index(fn)
+        ind = fl.index(fn)#TODO:possible unused
         if fn.marked:
             fn.marked = False
             return True
@@ -288,14 +304,20 @@ class RepFile(object):
 
 
 class FSTree(object):
+    """Holds a file system tree. Every file found via 'find' is represented
+    here. Keeps a reference to every file node. Enforces that a unique 
+    path corresponds to a unique file and a unique file node. Every 
+    subtree is also a FSTree instance and most methods operate recursively."""
     def __init__(self,path = b''):
-        self.branches = {}
+        self.branches = {} #Subtrees. Also FSTree instances
         self.leaves = {}
         self.path = path
         self.shown = None
         self.aggr_attrib = np.zeros((5,),dtype = np.int64)
         
     def add_leaf(self,leaf_path,leaf_attib):
+        """Add a leaf to the tree. Enforce unicity of files and create
+        subtrees as needed"""
         p = leaf_path.partition(b'/')
         if p[1] == b'': 
             #Leaf
@@ -303,6 +325,7 @@ class FSTree(object):
                 self.leaves[p[0]] = leaf_attib
                 return True
             else:
+                #File already added
                 return False
         elif len(p[0]) == 0:
             #root node
@@ -315,6 +338,7 @@ class FSTree(object):
 
     
     def compute_aggr(self):
+        """Compute aggregate values for the branch."""
         self.aggr_attrib[:] = 0
         for bname,br in self.branches.items():
             br.compute_aggr()
@@ -326,6 +350,7 @@ class FSTree(object):
             
             
     def get_branch(self,branch_path):
+        """Get the branch (a FSTree instance) corresponding to the path."""
         p = branch_path.partition(b'/')
         if  len(p[0]) == 0:
             #root node
@@ -347,16 +372,21 @@ class FSTree(object):
             return self.get_leaf(p[2])
         elif p[1] == b'': 
             #Leaf
-            return self.leaves[p[0]]
+            return self.leaves[p[0]]#Will fail looking for a file that isn't there
         else:
             assert len(p[2]) >0, 'Trying to get an empty leaf'
             return self.branches[p[0]].get_leaf(p[2])
 
     def get_index(self,ind):
+        """Return an element (a branch or FNode) corresponding to the 
+        position in the shown list."""
         return self.shown[ind]
 
     
     def copy_to_model(self,list_store):
+        """Copy branch contents to ListStore, keeping a list of shown 
+        elements. The index of the element in this list is also stored
+        in the ListStore."""
         ncol = list_store.get_n_columns
         list_store.clear()
         self.shown = []
@@ -376,6 +406,7 @@ class FSTree(object):
             ind = ind + 1
     
     def get_keys(self,keys = None):
+        """Get all the keys ((size,md5)) of this subtree recursively."""
         if keys is None:
             keys = set()
 
@@ -387,12 +418,14 @@ class FSTree(object):
         return keys
         
     def mark_all(self,rep_file):
+        """Mark recursively all repeated files in this subtree to be deleted."""
         for fn in self.leaves.values():
             fn.mark(rep_file)
         for br in self.branches.values():
             br.mark_all(rep_file)
 
     def unmark_all(self):
+        """Remove deleted flag recursively from all files in this subtree."""
         for fn in self.leaves.values():
             fn.marked = False
         for br in self.branches.values():
@@ -400,6 +433,7 @@ class FSTree(object):
 
     
     def delete_marked(self):
+        """Call delete_node() with all marked FNodes in this subtree."""
         for br in self.branches.values():
             br.delete_marked()
             #TODO add directory removal
@@ -409,6 +443,7 @@ class FSTree(object):
         
         
     def print(self,fill = ''):
+        """Old debug printing method. Probable does not work anymore."""
         first = True
         for bname,br in self.branches.items():
             if not first:
@@ -427,11 +462,13 @@ class FSTree(object):
 
 
 def make_fstree(find_output, tree_root, sizes , same_size):
+    """Update the root FSTree with an output of the 'find' run. For 
+    every file, add its size to the sizes dict. If the file's size was
+    already seen, add that size set of sizes with more than one file. In 
+    the and, update aggregates in FSTree."""
     files = find_output.split(b'\x00')
-    
-    
     for k in files[:-1]:
-        resp = k.partition(b' ')
+        resp = k.partition(b' ')#An espace separates the size from the path
         s = int(resp[0])
         file_node = FNode(resp[2],s)
         if tree_root.add_leaf(resp[2],file_node):
@@ -448,7 +485,8 @@ def make_fstree(find_output, tree_root, sizes , same_size):
 
     
 def compute_md5(fnlist,rep_files):
-
+    """Compute md5 from every file in fnlist. Do not recompute md5 from
+    files already analized."""
     while(len(fnlist)>0):
         fn = fnlist.pop(0)
         if fn.md5 is None:
@@ -777,8 +815,10 @@ class UI(object):
             self.update_path()
             
     def on_left_toggled(self,widget,tpath):
+        """Callback to toogled left panel. Mark the repeated file if possible."""
         tpath = self.left_conv_to_path(tpath)
         if tpath.get_depth() == 2:
+            #Only in a child row
             fn  = self.rep_files.getfn(self.repeated_tree_store,tpath)
             success = self.rep_files.toggle_mark(fn)
             if success:
@@ -792,6 +832,7 @@ class UI(object):
             
                 
     def up(self,widget,*args):
+        """Callback to go up a level in the right panel."""
         paths = self.shown_path.rpartition(b'/')
         if paths[1] != b'' and paths[2] != b'':
             self.shown_path = paths[0]
