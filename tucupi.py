@@ -731,10 +731,17 @@ class UI(object):
         files dictionary. Add a timeout function to control and check
         the progress of md5sum computation. 
         """
+        untreated = []
         for s in sorted(self.same_size,reverse=True):
-            for fn in self.sizes[s]:
+            untreated.clear()
+            while len(self.sizes[s]) > 0:
+                fn = self.sizes[s].pop(0)
                 if s > 0 and s < self.max_filesize:
                     self.md5_todo.append(fn)
+                else:
+                    untreated.append(fn)
+            self.sizes[s].extend(untreated)
+            
         if 0 in self.sizes:
             self.rep_files.add_empty(self.sizes[0])
         
