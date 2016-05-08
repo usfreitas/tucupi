@@ -86,12 +86,18 @@ class FNode(object):
         self.md5 = None
         self.size = size
         self.marked = False
+        self.kept = False
         self.repeated = False
     
     def mark(self,rep_file):
         """Mark itself to be deleted."""
-        if not self.marked and self.repeated:
+        if self.repeated and not self.kept and not self.marked:
             rep_file.toggle_mark(self)
+            
+    def keep(self):
+        """Mark itself to be kept. It is unmarked for deletion and can not be marked."""
+        self.marked = False
+        self.kept = True
 
 
 class RepFile(object):
@@ -260,6 +266,8 @@ class RepFile(object):
             fn.marked = False
             return True
         else:
+            if fn.kept:
+                return False
             allmarked = True
             with self.lock:
                 for k in fl:
@@ -313,7 +321,7 @@ class FSTree(object):
         self.leaves = {}
         self.path = path
         self.shown = None
-        self.aggr_attrib = np.zeros((5,),dtype = np.int64)
+        self.aggr_attrib = np.zeros((6,),dtype = np.int64)
         
     def add_leaf(self,leaf_path,leaf_attib):
         """Add a leaf to the tree. Enforce unicity of files and create
@@ -346,7 +354,7 @@ class FSTree(object):
 
         for lname,lf in self.leaves.items():
             self.aggr_attrib[:] = self.aggr_attrib + np.array([ 1, lf.size ,int(lf.repeated),
-                int(lf.repeated)*lf.size, int(lf.marked)],dtype=np.int64)
+                int(lf.repeated)*lf.size, int(lf.marked), int(lf.kept)],dtype=np.int64)
             
             
     def get_branch(self,branch_path):
@@ -400,7 +408,7 @@ class FSTree(object):
             ind = ind +1
         for lf_name,att in self.leaves.items():
             row = ['gtk-file',lf_name.decode(errors='replace')]
-            row.extend([ 1, att.size ,int(att.repeated),int(att.repeated)*att.size,int(att.marked),ind])
+            row.extend([ 1, att.size ,int(att.repeated),int(att.repeated)*att.size,int(att.marked),int(att.kept),ind])
             list_store.append(row)
             self.shown.append(att)
             ind = ind + 1
@@ -430,6 +438,22 @@ class FSTree(object):
             fn.marked = False
         for br in self.branches.values():
             br.unmark_all()
+
+    def keep_all(self):
+        """Mark recursively all files in this subtree to be kept."""
+        for fn in self.leaves.values():
+            fn.keep()
+        for br in self.branches.values():
+            br.keep_all()
+
+    def unkeep_all(self):
+        """Remove kept flag recursively from all files in this subtree."""
+        for fn in self.leaves.values():
+            fn.kept = False
+        for br in self.branches.values():
+            br.unkeep_all()
+
+
 
     
     def delete_marked(self):
@@ -581,7 +605,7 @@ class UI(object):
 
         
     def init_right_tree(self):
-        store = Gtk.ListStore(str, str, int,GObject.TYPE_INT64, int,GObject.TYPE_INT64,int,int)
+        store = Gtk.ListStore(str, str, int,GObject.TYPE_INT64, int,GObject.TYPE_INT64,int,int,int)
         
         tree = Gtk.TreeView(store)
 
@@ -614,6 +638,12 @@ class UI(object):
         mark_column = Gtk.TreeViewColumn("Marked", mark_renderer, text=6)
         mark_column.set_sort_column_id(5)
         tree.append_column(mark_column)
+
+        keep_renderer = Gtk.CellRendererText()
+        keep_column = Gtk.TreeViewColumn("Kept", keep_renderer, text=7)
+        keep_column.set_sort_column_id(6)
+        tree.append_column(keep_column)
+
 
         size_renderer = Gtk.CellRendererText()
         size_column = Gtk.TreeViewColumn("Size", size_renderer, text=3)
@@ -895,6 +925,41 @@ class UI(object):
 
         self.rep_files.update_model(self.repeated_tree_store)
         self.update_path()
+
+    def on_action_keep_all_activate(self,action, data = None):
+        model,selection = self.selection_right.get_selected_rows()
+        for titer in selection:
+            if self.fs_list_store[titer][0] == 'folder':
+                ind = self.fs_list_store[titer][-1]
+                branch = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                branch.keep_all()
+            if self.fs_list_store[titer][0] == 'gtk-file':
+                ind = self.fs_list_store[titer][-1]
+                fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                fn.keep()
+        branch = self.fstree_root.get_branch(self.shown_path)
+        branch.compute_aggr()
+
+        self.rep_files.update_model(self.repeated_tree_store)
+        self.update_path()
+
+    def on_action_unkeep_all_activate(self,action, data = None):
+        model,selection = self.selection_right.get_selected_rows()
+        for titer in selection:
+            if self.fs_list_store[titer][0] == 'folder':
+                ind = self.fs_list_store[titer][-1]
+                branch = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                branch.unkeep_all()
+            if self.fs_list_store[titer][0] == 'gtk-file':
+                ind = self.fs_list_store[titer][-1]
+                fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                fn.kept = False
+        branch = self.fstree_root.get_branch(self.shown_path)
+        branch.compute_aggr()
+
+        self.rep_files.update_model(self.repeated_tree_store)
+        self.update_path()
+
 
     def on_format_value(self,scale,value):
         return human_size(2**value,precision = 0)

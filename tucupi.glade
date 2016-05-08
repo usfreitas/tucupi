@@ -2,10 +2,20 @@
 <!-- Generated with glade 3.18.3 -->
 <interface>
   <requires lib="gtk+" version="3.4"/>
+  <object class="GtkAction" id="action_keep_all">
+    <property name="label" translatable="yes">Keep all files</property>
+    <property name="short_label" translatable="yes">Keep all</property>
+    <signal name="activate" handler="on_action_keep_all_activate" swapped="no"/>
+  </object>
   <object class="GtkAction" id="action_mark_all">
     <property name="label" translatable="yes">Mark all repeated</property>
     <property name="short_label" translatable="yes">Mark all</property>
     <signal name="activate" handler="on_action_mark_all_activate" swapped="no"/>
+  </object>
+  <object class="GtkAction" id="action_unkeep_all">
+    <property name="label" translatable="yes">Allow all files to be deleted</property>
+    <property name="short_label" translatable="yes">Unkeep all</property>
+    <signal name="activate" handler="on_action_unkeep_all_activate" swapped="no"/>
   </object>
   <object class="GtkAction" id="action_unmark_all">
     <property name="label" translatable="yes">Unmark all repeated</property>
@@ -30,6 +40,26 @@
         <property name="related_action">action_unmark_all</property>
         <property name="visible">True</property>
         <property name="can_focus">False</property>
+        <property name="use_underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="menuitem_keep_all">
+        <property name="use_action_appearance">True</property>
+        <property name="related_action">action_keep_all</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Keep all files</property>
+        <property name="use_underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="menuitem_unkeep_all">
+        <property name="use_action_appearance">True</property>
+        <property name="related_action">action_unkeep_all</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="label" translatable="yes">Unkeep all files</property>
         <property name="use_underline">True</property>
       </object>
     </child>
