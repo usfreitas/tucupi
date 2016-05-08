@@ -522,6 +522,8 @@ class UI(object):
         self.scale.set_value(42)
         self.max_filesize = 2**int(self.scale.get_value())
         self.pbar = self.builder.get_object('progressbar')
+        self.status_label = self.builder.get_object('status_label')
+        self.spinner = self.builder.get_object('spinner')
         
         self.open_diag = None
         self.finder_result = None
@@ -731,6 +733,7 @@ class UI(object):
 
                 self.md5_thr = threading.Thread(target= compute_md5, args = (self.md5_working,self.rep_files))
                 self.md5_thr.start()
+                self.spinner.start()
                 return True #We will run again
             else:
                 #Nothing to do
@@ -742,7 +745,7 @@ class UI(object):
                 self.update_repeated()
                 yet = len(self.md5_working)
                 self.pbar.set_fraction(self.progress[-yet])
-                print('Still {} files to process'.format(yet))
+                self.status_label.set_text('Still {} files to process'.format(yet))
                 return True
             else:
                 #We must stop
@@ -760,7 +763,8 @@ class UI(object):
                 self.stop = False
                 self.fstree_root.compute_aggr()
                 self.update_path()
-                print('Finished!')
+                self.spinner.stop()
+                self.status_label.set_text('Finished!')
                 #We are finished!
                 return False
 
