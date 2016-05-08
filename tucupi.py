@@ -745,7 +745,7 @@ class UI(object):
                 self.update_repeated()
                 yet = len(self.md5_working)
                 self.pbar.set_fraction(self.progress[-yet])
-                self.status_label.set_text('Still {} files to process'.format(yet))
+                self.status_label.set_text('Processing files of size {} and lower. Still {} files to process'.format(human_size(self.md5_working[0].size),yet))
                 return True
             else:
                 #We must stop
@@ -764,7 +764,11 @@ class UI(object):
                 self.fstree_root.compute_aggr()
                 self.update_path()
                 self.spinner.stop()
-                self.status_label.set_text('Finished!')
+                if len(self.md5_todo) > 0:
+                    msg = 'Stopped. There are {} files of {} or smaller remaining.'.format(len(self.md5_todo),human_size(self.md5_todo[0].size))
+                else:
+                    msg = 'Finished!'
+                self.status_label.set_text(msg)
                 #We are finished!
                 return False
 
