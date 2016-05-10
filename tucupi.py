@@ -823,9 +823,8 @@ class UI(object):
 
     def update_repeated(self):
         """Append to model repeated files recently found."""
-        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store)
-        self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
-        self.page = page
+        self.goto_page(None)#Force update of model and trigger
+                            #page label update
     
     def update_path(self):
         """Show a new path in the right pane."""
@@ -874,9 +873,7 @@ class UI(object):
             fn = branch.get_index(ind)
             if fn.repeated:
                 page,row,child = self.rep_files.get_page_tpath(fn)
-                page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,page)
-                self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
-                self.page = page
+                self.goto_page(page)
                 path = Gtk.TreePath(str(row))
                 cpath = self.repeated_filter.convert_child_path_to_path(path)
                 cpath = self.left_sort.convert_child_path_to_path(cpath)
@@ -1035,15 +1032,20 @@ class UI(object):
     def forward(self,widget,*args):
         self.rep_files.to_xmlfile('temp.xml')
         
-    def on_previous(self,widget,*args):
-        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,self.page-1)
+    def goto_page(self,page):
+        """Show requested page on the left panel. Update TreeModel with
+        latest data."""
+        #If page is None, only update data
+        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,page)
         self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
         self.page = page
+        
+        
+    def on_previous(self,widget,*args):
+        self.goto_page(self.page-1)
 
     def on_next(self,widget,*args):
-        page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,self.page+1)
-        self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
-        self.page = page
+        self.goto_page(self.page+1)
 
 
     def quit(self,widget,*args):
