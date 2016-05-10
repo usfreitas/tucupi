@@ -257,6 +257,18 @@ class RepFile(object):
             files = self.size_md5[key]
             child = ts[tpath]
             return files[child[-1]]
+
+    def get_page_tpath(self,fn):
+        """Find page and tree path corresponding to a FNode."""
+        key = (fn.size,fn.md5)
+        sorted_keys = sorted(self.repeated, reverse=True)
+        ind = sorted_keys.index(key)
+        files = self.size_md5[key]
+        child = files.index(fn)
+        fpage = ind/self.pagesize
+        page = math.floor(fpage)
+        row = ind - (page * self.pagesize)
+        return page, row, child
     
     def toggle_mark(self,fn):
         key = (fn.size,fn.md5)
@@ -853,11 +865,28 @@ class UI(object):
     def activated_fstree(self,widget,treepath,col):
         """Callback. Select a new folder to show."""
         titer = self.fs_list_store.get_iter(treepath)
+        ind = self.fs_list_store[titer][-1]
+        branch = self.fstree_root.get_branch(self.shown_path)
         if self.fs_list_store[titer][0] == 'folder':
-            ind = self.fs_list_store[titer][-1]
-            branch = self.fstree_root.get_branch(self.shown_path)
             self.shown_path = branch.get_index(ind).path
             self.update_path()
+        else:
+            fn = branch.get_index(ind)
+            if fn.repeated:
+                page,row,child = self.rep_files.get_page_tpath(fn)
+                page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,page)
+                self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
+                self.page = page
+                path = Gtk.TreePath(str(row))
+                cpath = self.repeated_filter.convert_child_path_to_path(path)
+                cpath = self.left_sort.convert_child_path_to_path(cpath)
+                self.tv_left.set_cursor(cpath, None, False)
+                self.activated_repeated_tree(self.tv_left,cpath,None)
+                self.tv_left.expand_row(cpath,False)
+                
+
+                #set_cursor(path, None, False)
+                
             
     def on_left_toggled(self,widget,tpath):
         """Callback to toogled left panel. Mark the repeated file if possible."""
