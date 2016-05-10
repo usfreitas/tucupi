@@ -573,7 +573,6 @@ class UI(object):
         self.shown_path = ''
         self.stop = False
         self.show_all = True
-        self.shown_keys = set()
         
         
         self.init_left_tree()
@@ -587,10 +586,7 @@ class UI(object):
         ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool,bool,int)
         
         
-        self.repeated_filter = ts.filter_new()
-        self.repeated_filter.set_visible_func(self.repeated_visible)
-        self.left_sort = Gtk.TreeModelSort(self.repeated_filter)
-        self.tv_left = Gtk.TreeView(self.left_sort)
+        self.tv_left = Gtk.TreeView(ts)
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn('Size',renderer,text = 1)
         col.set_cell_data_func(renderer,col_human,1)
@@ -671,25 +667,6 @@ class UI(object):
         self.selection_right = tree.get_selection()
         self.selection_right.set_mode(Gtk.SelectionMode.MULTIPLE)
         self.fs_list_store = store
-        
-    def repeated_visible(self,model,miter,data = None):
-        """Filter to show only repeated files in currently shown tree."""
-        
-        if self.show_all:
-            return True
-        else:
-            path = model.get_path(miter)
-            row = model[path[0]]
-            key = (row[1],row[0].encode(errors='surrogateescape'))
-            return key in self.shown_keys
-    
-    def left_conv_to_path(self,path):
-        """Retrieve path in original model after sort and filter models.""" 
-        if type(path) is str:
-            path = Gtk.TreePath(path)
-        cpath = self.left_sort.convert_path_to_child_path(path)
-        cpath = self.repeated_filter.convert_path_to_child_path(cpath)
-        return cpath
 
 
     def open(self,widget,*args):
@@ -830,11 +807,6 @@ class UI(object):
         """Show a new path in the right pane."""
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.copy_to_model(self.fs_list_store)
-        if not self.show_all:
-            self.shown_keys = branch.get_keys()
-            self.repeated_filter.refilter()
-        else:
-            self.show_keys = set()
         self.path_label.set_label('Location: {}'.format(self.shown_path.decode(errors='replace')))
         
 
@@ -843,17 +815,15 @@ class UI(object):
         #sp = treepath.split(':')
         if  treepath.get_depth() == 1:
             #Main row
-            orig_tpath = self.left_conv_to_path(treepath)
-            row = self.repeated_tree_store[orig_tpath]
+            row = self.repeated_tree_store[treepath]
             if not row[3]:
-                self.rep_files.add_children(self.repeated_tree_store,orig_tpath)
+                self.rep_files.add_children(self.repeated_tree_store,treepath)
                 treeview.expand_row(treepath,False)
             elif treeview.row_expanded(treepath):
                 treeview.collapse_row(treepath)
             else:
                 treeview.expand_row(treepath,False)
         else:
-            treepath = self.left_conv_to_path(treepath)
             fn = self.rep_files.getfn(self.repeated_tree_store,treepath)
             fname = fn.fpath
             sp = fname.rpartition(b'/')
@@ -875,11 +845,9 @@ class UI(object):
                 page,row,child = self.rep_files.get_page_tpath(fn)
                 self.goto_page(page)
                 path = Gtk.TreePath(str(row))
-                cpath = self.repeated_filter.convert_child_path_to_path(path)
-                cpath = self.left_sort.convert_child_path_to_path(cpath)
-                self.tv_left.set_cursor(cpath, None, False)
-                self.activated_repeated_tree(self.tv_left,cpath,None)
-                self.tv_left.expand_row(cpath,False)
+                self.tv_left.set_cursor(path, None, False)
+                self.activated_repeated_tree(self.tv_left,path,None)
+                self.tv_left.expand_row(path,False)
                 
 
                 #set_cursor(path, None, False)
@@ -887,7 +855,8 @@ class UI(object):
             
     def on_left_toggled(self,widget,tpath):
         """Callback to toogled left panel. Mark the repeated file if possible."""
-        tpath = self.left_conv_to_path(tpath)
+        if type(tpath) is str:
+            tpath = Gtk.TreePath(tpath)
         if tpath.get_depth() == 2:
             #Only in a child row
             fn  = self.rep_files.getfn(self.repeated_tree_store,tpath)

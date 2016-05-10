@@ -49,7 +49,6 @@
         <property name="related_action">action_keep_all</property>
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Keep all files</property>
         <property name="use_underline">True</property>
       </object>
     </child>
@@ -59,7 +58,6 @@
         <property name="related_action">action_unkeep_all</property>
         <property name="visible">True</property>
         <property name="can_focus">False</property>
-        <property name="label" translatable="yes">Unkeep all files</property>
         <property name="use_underline">True</property>
       </object>
     </child>
