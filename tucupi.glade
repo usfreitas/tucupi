@@ -223,13 +223,13 @@
               </packing>
             </child>
             <child>
-              <object class="GtkToggleButton" id="show_all_button">
-                <property name="label" translatable="yes">Show All</property>
+              <object class="GtkToggleButton" id="hide_processed_button">
+                <property name="label" translatable="yes">Hide Processed</property>
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="active">True</property>
-                <signal name="toggled" handler="on_show_all_button_toggled" swapped="no"/>
+                <property name="relief">none</property>
+                <signal name="toggled" handler="on_hide_processed_button_toggled" swapped="no"/>
               </object>
               <packing>
                 <property name="expand">False</property>
@@ -250,6 +250,9 @@
                 <property name="fill">True</property>
                 <property name="position">3</property>
               </packing>
+            </child>
+            <child>
+              <placeholder/>
             </child>
           </object>
           <packing>

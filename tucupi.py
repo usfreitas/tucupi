@@ -108,6 +108,8 @@ class RepFile(object):
         self.lock = threading.Lock()
         self.size_md5 = {}
         self.repeated = set()
+        self.filtered = set()
+        self.filters = {'NotProcessed':None}
         self.ts_contents = []
         self.pagesize = pagesize
         self.page = 0
@@ -148,17 +150,56 @@ class RepFile(object):
         for changing the page shown."""
         if page is None:
             page = self.page
+
+        #Update filtered
+        self.update_filter()
+
+        npages = math.ceil(len(self.filtered)/self.pagesize)
+
+        #Force page shown to be a valid one
+        if page < 0:
+            page = 0
+        if page >= npages:
+            page = npages - 1
+
+        #If page is valid change to it. May be the same already shown.
+        self.page = page
+        #Sort all filtered files from largest downward
+        sorted_keys = sorted(self.filtered, reverse=True)
+        #Select files from this page
+        page_keys = sorted_keys[self.page*self.pagesize:(self.page+1)*self.pagesize]
+
         
         with self.lock:
-            if page == self.page:
-            #Updating present page view
-                main_iter = ts.get_iter_first()
-                while main_iter != None:
-                    main_row = ts[main_iter]
-                    key = self.ts_contents[main_row[-1]]
+            print('=====Update_model======')
+            ts_newcontents = []
+            main_iter = ts.get_iter_first()
+            while main_iter != None:
+                main_row = ts[main_iter]
+                key = self.ts_contents[main_row[-1]]
+                if len(page_keys) == 0 or page_keys[0] < key:
+                    #This key is not in the shown list. Remove the row.
+                    print('Key removed: ',key)
+                    if not ts.remove(main_iter):
+                        main_iter = None
+                elif page_keys[0] > key:
+                    #A row must be inserted before this one
+                    key = page_keys.pop(0)
+                    print('Row inserted: ',key)
+                    ts_newcontents.append(key)
                     files = self.size_md5[key]
-                    unmarked = [fn for fn in files if not fn.marked]
-                    allmarked = len(unmarked) == 1
+                    allmarked = self._is_processed(files)
+                    row = [key[1].decode(errors='replace'), key[0] ,allmarked,False, len(ts_newcontents) -1 ]
+                    ts.insert_before(None,main_iter,row)
+
+                elif page_keys[0] == key:
+                    print('Row updated: ',key)
+                    #Key is present in page_keys. Update row.
+                    page_keys.pop(0)
+                    ts_newcontents.append(key)
+                    main_row[-1] = len(ts_newcontents) -1 
+                    files = self.size_md5[key]
+                    allmarked = self._is_processed(files)
                     if allmarked != main_row[2]:
                         #Only update when necessary
                         main_row[2] = allmarked
@@ -175,36 +216,24 @@ class RepFile(object):
                         for k in range(nfiles-nchildren):
                             #Append new children if necessary
                             self._append_child(ts,main_iter,files[k+nchildren],k+nchildren)
-
+                    #This row was updated. Get next row.
                     main_iter = ts.iter_next(main_iter)
-
-
-            npages = math.ceil(len(self.repeated)/self.pagesize)
-            if page >= npages or page < 0:
-                #invalid page, return
-                return (self.page,npages,len(self.repeated))
-
-            if page != self.page:
-                #showing a different page, clear model and internal list
-                self.page = page
-                self.ts_contents.clear()
-                ts.clear()
-
-            #Sort all repeated files from largest downward
-            sorted_keys = sorted(self.repeated, reverse=True)
-            #Select files from this page
-            sorted_keys = sorted_keys[self.page*self.pagesize:(self.page+1)*self.pagesize]
-            #Find files not yet in the TreeStore
-            sorted_keys = sorted(set(sorted_keys)-set(self.ts_contents),reverse=True)
-            for key in sorted_keys:
-                #append missing rows (could be all of them)
-                self.ts_contents.append(key)
+                else:
+                    raise ValueError('Should not have reached this.')
+            
+            for key in page_keys:
+                print('End key inserted: ',key)
+                #Add the remaining keys 
+                ts_newcontents.append(key)
                 files = self.size_md5[key]
-                unmarked = [fn for fn in files if not fn.marked]
-                allmarked = len(unmarked) == 1
-                row = [key[1].decode(errors='replace'), key[0] ,allmarked,False, len(self.ts_contents) -1 ]
+                allmarked = self._is_processed(files)
+                row = [key[1].decode(errors='replace'), key[0] ,allmarked,False, len(ts_newcontents) -1 ]
                 ts.append(None,row)
-        return (self.page,npages,len(self.repeated))
+            
+            self.ts_contents = ts_newcontents
+
+
+        return (self.page,npages,len(self.filtered))
     
     def _append_child(self,ts,main_iter,fn,index):
         """This function should only be called from inside a with lock block"""
@@ -221,33 +250,42 @@ class RepFile(object):
             for kk, f in enumerate(files):
                 self._append_child(ts,main_iter,f,kk)
 
+    def _is_processed(self,file_list):
+        """Whether all but one file in the list are marked."""
+        flag = False
+        for fn in file_list:
+            if flag and not fn.marked:
+                #Stop as soon as we find two unmarked files
+                return False
+            flag = flag or not fn.marked
+        return True
+            
+
+    def not_processed_filter(self):
+        """Set of repeated files where more than one copy is unmarked"""
+        nproc = set()
+        with self.lock:
+            for key in self.repeated:
+                if not self._is_processed(self.size_md5[key]):
+                    nproc.add(key)
+        return nproc
+
+    def update_filter(self):
+        """Update list of files to show."""
+        self.filtered.clear()
+        self.filtered.update(self.repeated)
+        for f in self.filters.values():
+            if f is not None:
+                self.filtered &= f()
+        
+
+
     def is_processed(self,ind):
         key = self.ts_contents[ind]
         files = self.size_md5[key]
         unmarked = [fn for fn in files if not fn.marked]
         return len(unmarked) == 1
     
-    def append_to_model(self,ts):
-        with self.lock:
-            main_iter = ts.get_iter_first()
-            while main_iter != None:
-                main_row = ts[main_iter]
-                if main_row[3]:
-                    key = self.ts_contents[main_row[-1]]
-                    files = self.size_md5[key]
-                    nchildren = ts.iter_n_children(main_iter)
-                    for k in range(len(files)-nchildren):
-                        f = files[nchildren+k]
-                        ts.append(main_iter,[f.fpath.decode(errors='replace'), files[0].size, f.marked,False,nchildren+k])
-                
-                main_iter = ts.iter_next(main_iter)
-            
-            copied = set(self.ts_contents)
-            for k in self.repeated - copied:
-                files = self.size_md5[k]
-                self.ts_contents.append(k)
-                main_row = ts.append(None,[k[1].decode(errors='replace'), k[0] ,False,False, len(self.ts_contents) -1 ])
-        print('append_to_model lock released')
     
     def getfn(self,ts,tpath):
         assert tpath.get_depth() == 2, 'tree path not from a file'
@@ -572,7 +610,7 @@ class UI(object):
         self.rep_files = RepFile()
         self.shown_path = ''
         self.stop = False
-        self.show_all = True
+        self.hide_processed_filter = False
         
         
         self.init_left_tree()
@@ -590,8 +628,8 @@ class UI(object):
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn('Size',renderer,text = 1)
         col.set_cell_data_func(renderer,col_human,1)
-        col.set_sort_column_id(1)
-        self.left_sort_col = col
+        #col.set_sort_column_id(1)
+        #self.left_sort_col = col
         self.tv_left.append_column(col)
         renderer = Gtk.CellRendererToggle()
         renderer.connect('toggled',self.on_left_toggled)
@@ -606,10 +644,10 @@ class UI(object):
         
         
         self.repeated_tree_store = ts
-        self.left_sort_col.set_sort_order(Gtk.SortType.DESCENDING)
+        #self.left_sort_col.set_sort_order(Gtk.SortType.DESCENDING)
 
-        self.left_sort_col.clicked()
-        self.left_sort_col.clicked()
+        #self.left_sort_col.clicked()
+        #self.left_sort_col.clicked()
 
         
     def init_right_tree(self):
@@ -888,9 +926,13 @@ class UI(object):
         if self.md5_thr is None:
             GObject.timeout_add(500,self.check_md5_progress)
     
-    def on_show_all_button_toggled(self,widget, data = None):
-        self.show_all = widget.get_active()
-        self.repeated_filter.refilter()
+    def on_hide_processed_button_toggled(self,widget, data = None):
+        self.hide_processed_filter = widget.get_active()
+        if self.hide_processed_filter:
+            self.rep_files.filters['NotProcessed'] = self.rep_files.not_processed_filter
+        else:
+            self.rep_files.filters['NotProcessed'] = None
+        self.goto_page(None)
         
     def on_action_mark_all_activate(self,action, data = None):
         model,selection = self.selection_right.get_selected_rows()
