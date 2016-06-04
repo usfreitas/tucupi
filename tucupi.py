@@ -171,7 +171,7 @@ class RepFile(object):
 
         
         with self.lock:
-            print('=====Update_model======')
+            #print('=====Update_model======')
             ts_newcontents = []
             main_iter = ts.get_iter_first()
             while main_iter != None:
@@ -179,13 +179,13 @@ class RepFile(object):
                 key = self.ts_contents[main_row[-1]]
                 if len(page_keys) == 0 or page_keys[0] < key:
                     #This key is not in the shown list. Remove the row.
-                    print('Key removed: ',key)
+                    #print('Key removed: ',key)
                     if not ts.remove(main_iter):
                         main_iter = None
                 elif page_keys[0] > key:
                     #A row must be inserted before this one
                     key = page_keys.pop(0)
-                    print('Row inserted: ',key)
+                    #print('Row inserted: ',key)
                     ts_newcontents.append(key)
                     files = self.size_md5[key]
                     allmarked = self._is_processed(files)
@@ -193,7 +193,7 @@ class RepFile(object):
                     ts.insert_before(None,main_iter,row)
 
                 elif page_keys[0] == key:
-                    print('Row updated: ',key)
+                    #print('Row updated: ',key)
                     #Key is present in page_keys. Update row.
                     page_keys.pop(0)
                     ts_newcontents.append(key)
@@ -222,7 +222,7 @@ class RepFile(object):
                     raise ValueError('Should not have reached this.')
             
             for key in page_keys:
-                print('End key inserted: ',key)
+                #print('End key inserted: ',key)
                 #Add the remaining keys 
                 ts_newcontents.append(key)
                 files = self.size_md5[key]
@@ -808,8 +808,12 @@ class UI(object):
                 #Thread still running. Come back later
                 self.update_repeated()
                 yet = len(self.md5_working)
-                self.pbar.set_fraction(self.progress[-yet])
-                self.status_label.set_text('Processing files of size {} and lower. Still {} files to process'.format(human_size(self.md5_working[0].size),yet))
+                if yet > 0:
+                    self.pbar.set_fraction(self.progress[-yet])
+                    self.status_label.set_text('Processing files of size {} and lower. Still {} files to process'.format(human_size(self.md5_working[0].size),yet))
+                else:
+                    self.pbar.set_fraction(1.0)
+                    self.status_label.set_text('Finished?')
                 return True
             else:
                 #We must stop
@@ -948,7 +952,7 @@ class UI(object):
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
 
-        self.rep_files.update_model(self.repeated_tree_store)
+        self.goto_page(None)
         self.update_path()
 
         
@@ -967,7 +971,7 @@ class UI(object):
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
 
-        self.rep_files.update_model(self.repeated_tree_store)
+        self.goto_page(None)
         self.update_path()
 
     def on_action_keep_all_activate(self,action, data = None):
@@ -984,7 +988,7 @@ class UI(object):
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
 
-        self.rep_files.update_model(self.repeated_tree_store)
+        self.goto_page(None)
         self.update_path()
 
     def on_action_unkeep_all_activate(self,action, data = None):
@@ -1001,7 +1005,7 @@ class UI(object):
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
 
-        self.rep_files.update_model(self.repeated_tree_store)
+        self.rep_files.goto_page(None)
         self.update_path()
 
 

@@ -228,7 +228,6 @@
                 <property name="visible">True</property>
                 <property name="can_focus">True</property>
                 <property name="receives_default">True</property>
-                <property name="relief">none</property>
                 <signal name="toggled" handler="on_hide_processed_button_toggled" swapped="no"/>
               </object>
               <packing>
