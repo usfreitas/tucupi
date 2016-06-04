@@ -277,6 +277,11 @@ class RepFile(object):
         for f in self.filters.values():
             if f is not None:
                 self.filtered &= f()
+
+    def clear_filters(self):
+        """Clear all filters"""
+        for k in self.filters.keys():
+            self.filters[k] = None
         
 
 
@@ -303,9 +308,8 @@ class RepFile(object):
         ind = sorted_keys.index(key)
         files = self.size_md5[key]
         child = files.index(fn)
-        fpage = ind/self.pagesize
-        page = math.floor(fpage)
-        row = ind - (page * self.pagesize)
+        page = ind // self.pagesize
+        row = ind % self.pagesize
         return page, row, child
     
     def toggle_mark(self,fn):
@@ -598,6 +602,7 @@ class UI(object):
         self.pbar = self.builder.get_object('progressbar')
         self.status_label = self.builder.get_object('status_label')
         self.spinner = self.builder.get_object('spinner')
+        self.hide_processed_button = self.builder.get_object('hide_processed_button')
         
         self.open_diag = None
         self.finder_result = None
@@ -885,16 +890,17 @@ class UI(object):
             fn = branch.get_index(ind)
             if fn.repeated:
                 page,row,child = self.rep_files.get_page_tpath(fn)
+                self.rep_files.clear_filters()
+                self.hide_processed_button.set_active(False)
                 self.goto_page(page)
                 path = Gtk.TreePath(str(row))
                 self.tv_left.set_cursor(path, None, False)
                 self.activated_repeated_tree(self.tv_left,path,None)
                 self.tv_left.expand_row(path,False)
-                
 
-                #set_cursor(path, None, False)
-                
-            
+
+
+
     def on_left_toggled(self,widget,tpath):
         """Callback to toogled left panel. Mark the repeated file if possible."""
         if type(tpath) is str:
@@ -932,11 +938,13 @@ class UI(object):
     
     def on_hide_processed_button_toggled(self,widget, data = None):
         self.hide_processed_filter = widget.get_active()
-        if self.hide_processed_filter:
-            self.rep_files.filters['NotProcessed'] = self.rep_files.not_processed_filter
-        else:
-            self.rep_files.filters['NotProcessed'] = None
-        self.goto_page(None)
+        if self.hide_processed_filter != bool(self.rep_files.filters['NotProcessed']):
+            #Do nothing if filter state already corresponds to button state
+            if self.hide_processed_filter:
+                self.rep_files.filters['NotProcessed'] = self.rep_files.not_processed_filter
+            else:
+                self.rep_files.filters['NotProcessed'] = None
+            self.goto_page(None)
         
     def on_action_mark_all_activate(self,action, data = None):
         model,selection = self.selection_right.get_selected_rows()
