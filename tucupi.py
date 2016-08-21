@@ -667,6 +667,8 @@ class UI(object):
         name_column.pack_start(name_renderer,True)
         name_column.add_attribute(icon_renderer,'icon-name',0)
         name_column.add_attribute(name_renderer,'text',1)
+        name_column.set_sizing(Gtk.TreeViewColumnSizing.FIXED)
+        name_column.set_resizable(True)
         tree.append_column(name_column)
 
         repsize_renderer = Gtk.CellRendererText()
