@@ -1015,7 +1015,7 @@ class UI(object):
         branch = self.fstree_root.get_branch(self.shown_path)
         branch.compute_aggr()
 
-        self.rep_files.goto_page(None)
+        self.goto_page(None)
         self.update_path()
 
 
