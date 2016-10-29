@@ -603,6 +603,8 @@ class UI(object):
         self.status_label = self.builder.get_object('status_label')
         self.spinner = self.builder.get_object('spinner')
         self.hide_processed_button = self.builder.get_object('hide_processed_button')
+        self.page_adjustment = self.builder.get_object('page_adjustment')
+
         
         self.open_diag = None
         self.finder_result = None
@@ -1017,6 +1019,10 @@ class UI(object):
 
         self.goto_page(None)
         self.update_path()
+        
+    def on_page_adjustment_value_changed(self,adj,data=None):
+        #print('Page changed!',self.page_adjustment.get_value())
+        self.goto_page(int(self.page_adjustment.get_value())-1)
 
 
     def on_format_value(self,scale,value):
@@ -1063,14 +1069,20 @@ class UI(object):
         #If page is None, only update data
         page,npages,nrep = self.rep_files.update_model(self.repeated_tree_store,page)
         self.files_label.set_label('Page {} of {} ({} repeated files)'.format(page+1,npages,nrep))
+        self.page_adjustment.set_upper(max(npages,1))
+        self.page_adjustment.set_value(page+1) 
         self.page = page
-        
-        
-    def on_previous(self,widget,*args):
-        self.goto_page(self.page-1)
 
-    def on_next(self,widget,*args):
-        self.goto_page(self.page+1)
+        
+        
+    def on_first_page(self,widget,*args):
+        #self.goto_page(self.page-1)
+        self.page_adjustment.set_value(1)
+
+    def on_last_page(self,widget,*args):
+        #self.goto_page(self.page+1)
+        last_page = self.page_adjustment.get_upper()
+        self.page_adjustment.set_value(int(last_page))
 
 
     def quit(self,widget,*args):
