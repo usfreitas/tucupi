@@ -811,6 +811,7 @@ class UI(object):
                 return True #We will run again
             else:
                 #Nothing to do
+                self.status_label.set_text('No repeated files found.')
                 return False
 
         elif self.md5_thr.is_alive():
