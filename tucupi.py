@@ -31,15 +31,6 @@ from xml.dom.minidom import getDOMImplementation
 impl = getDOMImplementation()
 
 
-class DelOutput(object):
-    def __init__(self):
-        self.buffer = b''
-    def add_arg(self,arg):
-        self.buffer = self.buffer + arg + b'\x00'
-    def clear(self):
-        self.buffer = b''
-
-del_out = DelOutput()
 
 
 def human_size(s,precision = 2):
@@ -333,6 +324,15 @@ class RepFile(object):
                 fn.marked = True
                 return True
 
+    def delete_marked(self,fobj):
+        with self.lock:
+            for key in sorted(self.repeated,reverse=True):
+                fn_list = self.size_md5[key]
+                marked = filter(lambda x:x.marked,fn_list)
+                for fn in marked:
+                    fobj.write(fn.fpath)
+                    fobj.write(b'\x00')
+                    
     def to_xmlfile(self,fname):
         with impl.createDocument(None, "data", None) as xmldoc:
             root = xmldoc.documentElement
@@ -510,14 +510,6 @@ class FSTree(object):
 
 
     
-    def delete_marked(self):
-        """Call delete_node() with all marked FNodes in this subtree."""
-        for br in self.branches.values():
-            br.delete_marked()
-            #TODO add directory removal
-        for fn in self.leaves.values():
-            if fn.marked:
-                delete_fnode(fn)
         
         
     def print(self,fill = ''):
@@ -577,11 +569,6 @@ def compute_md5(fnlist,rep_files):
             fn.md5 = md5
             rep_files.add_fn(fn)
 
-def delete_fnode(fnode):
-    del_out.add_arg(fnode.fpath)
-    #cmd = ['ls','-l', fnode.fpath]
-    #ret = sb.call(cmd)
-    return True
         
  
         
@@ -1051,10 +1038,8 @@ class UI(object):
         if resp == Gtk.ResponseType.OK:
             fpath = save_diag.get_filename()
             self.rep_files.to_xmlfile(fpath)
-            del_out.clear()
-            self.fstree_root.delete_marked()
             with open('del_out','wb') as f:
-                f.write(del_out.buffer)
+                self.rep_files.delete_marked(f)
         save_diag.destroy()
         
 
