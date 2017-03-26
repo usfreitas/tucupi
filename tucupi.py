@@ -100,7 +100,7 @@ class RepFile(object):
         self.size_md5 = {}
         self.repeated = set()
         self.filtered = set()
-        self.filters = {'NotProcessed':None}
+        self.filters = {'NotProcessed':None, 'NotProcessedKept':None}
         self.ts_contents = []
         self.pagesize = pagesize
         self.page = 0
@@ -250,6 +250,19 @@ class RepFile(object):
                 return False
             flag = flag or not fn.marked
         return True
+
+    def _is_processed_or_kept(self,file_list):
+        """Whether all but at most one file in the list are marked, ignoring kept."""
+        flag = False
+        for fn in file_list:
+            if fn.kept:
+                continue
+            if flag and not fn.marked:
+                #Stop as soon as we find two unmarked files
+                return False
+            flag = flag or not fn.marked
+        return True
+
             
 
     def not_processed_filter(self):
@@ -260,6 +273,16 @@ class RepFile(object):
                 if not self._is_processed(self.size_md5[key]):
                     nproc.add(key)
         return nproc
+
+    def not_processed_kept_filter(self):
+        """Set of repeated files where more than one copy is unmarked"""
+        nproc = set()
+        with self.lock:
+            for key in self.repeated:
+                if not self._is_processed_or_kept(self.size_md5[key]):
+                    nproc.add(key)
+        return nproc
+
 
     def update_filter(self):
         """Update list of files to show."""
@@ -623,6 +646,7 @@ class UI(object):
         self.shown_path = ''
         self.stop = False
         self.hide_processed_filter = False
+        self.hide_processed_kept_filter = False
         
         
         self.init_left_tree()
@@ -955,6 +979,16 @@ class UI(object):
                 self.rep_files.filters['NotProcessed'] = self.rep_files.not_processed_filter
             else:
                 self.rep_files.filters['NotProcessed'] = None
+            self.goto_page(None)
+
+    def on_hide_processed_kept_button_toggled(self,widget, data = None):
+        self.hide_processed_kept_filter = widget.get_active()
+        if self.hide_processed_kept_filter != bool(self.rep_files.filters['NotProcessedKept']):
+            #Do nothing if filter state already corresponds to button state
+            if self.hide_processed_kept_filter:
+                self.rep_files.filters['NotProcessedKept'] = self.rep_files.not_processed_kept_filter
+            else:
+                self.rep_files.filters['NotProcessedKept'] = None
             self.goto_page(None)
         
     def on_action_mark_all_activate(self,action, data = None):

@@ -259,6 +259,20 @@
               </packing>
             </child>
             <child>
+              <object class="GtkToggleButton" id="hide_processed_kept_button">
+                <property name="label" translatable="yes">Hide Processed &amp; Kept</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <signal name="toggled" handler="on_hide_processed_kept_button_toggled" swapped="no"/>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">3</property>
+              </packing>
+            </child>
+            <child>
               <object class="GtkButton" id="button6">
                 <property name="label" translatable="yes">Delete marked</property>
                 <property name="visible">True</property>
@@ -269,11 +283,8 @@
               <packing>
                 <property name="expand">False</property>
                 <property name="fill">True</property>
-                <property name="position">3</property>
+                <property name="position">4</property>
               </packing>
-            </child>
-            <child>
-              <placeholder/>
             </child>
           </object>
           <packing>
