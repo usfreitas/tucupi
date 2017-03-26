@@ -12,6 +12,11 @@
     <property name="short_label" translatable="yes">Mark all</property>
     <signal name="activate" handler="on_action_mark_all_activate" swapped="no"/>
   </object>
+  <object class="GtkAction" id="action_mark_others">
+    <property name="label" translatable="yes">Mark other copies</property>
+    <property name="short_label" translatable="yes">Mark others</property>
+    <signal name="activate" handler="on_action_mark_others_activate" swapped="no"/>
+  </object>
   <object class="GtkAction" id="action_unkeep_all">
     <property name="label" translatable="yes">Allow all files to be deleted</property>
     <property name="short_label" translatable="yes">Unkeep all</property>
@@ -56,6 +61,15 @@
       <object class="GtkMenuItem" id="menuitem_unkeep_all">
         <property name="use_action_appearance">True</property>
         <property name="related_action">action_unkeep_all</property>
+        <property name="visible">True</property>
+        <property name="can_focus">False</property>
+        <property name="use_underline">True</property>
+      </object>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="menuitem_mark_others">
+        <property name="use_action_appearance">True</property>
+        <property name="related_action">action_mark_others</property>
         <property name="visible">True</property>
         <property name="can_focus">False</property>
         <property name="use_underline">True</property>

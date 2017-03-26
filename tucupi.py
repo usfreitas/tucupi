@@ -323,6 +323,17 @@ class RepFile(object):
             else:
                 fn.marked = True
                 return True
+                
+    def mark_others(self, fn):
+        """Unmark this file and try to mark for deletion all the other copies of it."""
+        key = (fn.size, fn.md5)
+        with self.lock:
+            fl = self.size_md5[key]
+            fn.marked = False
+            for k in fl:
+                #We know that at least one file is not marked so we can go ahead and mark everything
+                if not k.kept and k is not fn:
+                    k.marked = True
 
     def delete_marked(self,fobj):
         with self.lock:
@@ -507,6 +518,13 @@ class FSTree(object):
         for br in self.branches.values():
             br.unkeep_all()
 
+    def mark_others(self,rep_file):
+        """Mark for deletion all the other copies of  all files in this subtree."""
+        for fn in self.leaves.values():
+            if fn.repeated:
+                rep_file.mark_others(fn)
+        for br in self.branches.values():
+            br.mark_others(rep_file)
 
 
     
@@ -1008,7 +1026,20 @@ class UI(object):
 
         self.goto_page(None)
         self.update_path()
-        
+
+    def on_action_mark_others_activate(self,action, data = None):
+        model,selection = self.selection_right.get_selected_rows()
+        for titer in selection:
+            if self.fs_list_store[titer][0] == 'folder':
+                ind = self.fs_list_store[titer][-1]
+                branch = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                branch.mark_others(self.rep_files)
+            if self.fs_list_store[titer][0] == 'gtk-file':
+                ind = self.fs_list_store[titer][-1]
+                fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
+                self.rep_files.mark_others(fn)
+        self.on_action_unmark_all_activate(action, data)
+
     def on_page_adjustment_value_changed(self,adj,data=None):
         #print('Page changed!',self.page_adjustment.get_value())
         self.goto_page(int(self.page_adjustment.get_value())-1)
