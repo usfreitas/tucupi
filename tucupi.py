@@ -26,6 +26,7 @@ import subprocess as sb
 import numpy as np
 
 import math
+import pickle
 
 from xml.dom.minidom import getDOMImplementation
 impl = getDOMImplementation()
@@ -79,6 +80,15 @@ class FNode(object):
         self.marked = False
         self.kept = False
         self.repeated = False
+
+    def get_state(self):
+        """Ruturns a tuple with the instance's state."""
+        return (self.fpath, self.md5, self.size, self.marked, self.kept, self.repeated)
+
+    def set_state(self, state):
+        """Set the instance's state. Does NOT verify invariants."""
+        self.fpath, self.md5, self.size, self.marked, self.kept, self.repeated = state
+
     
     def mark(self,rep_file):
         """Mark itself to be deleted."""
@@ -89,6 +99,7 @@ class FNode(object):
         """Mark itself to be kept. It is unmarked for deletion and can not be marked."""
         self.marked = False
         self.kept = True
+        
 
 
 class RepFile(object):
@@ -548,6 +559,14 @@ class FSTree(object):
                 rep_file.mark_others(fn)
         for br in self.branches.values():
             br.mark_others(rep_file)
+            
+    def pickle_fnode(self, f, saved_fns):
+        """Recursively pickle every fnode in file f."""
+        for fn in self.leaves.values():
+            pickle.dump(fn.get_state(), f)
+            saved_fns[0] += 1
+        for br in self.branches.values():
+            br.pickle_fnode(f, saved_fns)
 
 
     
@@ -609,6 +628,13 @@ def compute_md5(fnlist,rep_files):
             
             fn.md5 = md5
             rep_files.add_fn(fn)
+            
+def save_state(fpath, fstree, saved_fns):
+
+    total_fns = fstree.aggr_attrib[0]
+    with open(fpath, 'wb') as f:
+        pickle.dump(total_fns, f)
+        fstree.pickle_fnode(f,saved_fns)
 
         
  
@@ -636,13 +662,9 @@ class UI(object):
         
         self.open_diag = None
         self.finder_result = None
-        self.fstree_root = FSTree()
-        self.sizes = {}
-        self.same_size = set()
-        self.md5_todo = []
+        self.clear_data()
         self.md5_working = []
         self.md5_thr = None
-        self.rep_files = RepFile()
         self.shown_path = ''
         self.stop = False
         self.hide_processed_filter = False
@@ -744,6 +766,15 @@ class UI(object):
         self.selection_right = tree.get_selection()
         self.selection_right.set_mode(Gtk.SelectionMode.MULTIPLE)
         self.fs_list_store = store
+        
+    def clear_data(self):
+        """Clear all data. Used for clearing up before loading backup""" 
+        self.fstree_root = FSTree()
+        self.sizes = {}
+        self.same_size = set()
+        self.rep_files = RepFile()
+        self.md5_todo = []
+
 
 
     def open(self,widget,*args):
@@ -879,6 +910,47 @@ class UI(object):
                 self.status_label.set_text(msg)
                 #We are finished!
                 return False
+
+
+    def on_action_save_state_activate(self,action,*args):
+        """Open widget to select a file to save the present state."""
+        if self.md5_thr is None:
+            save_diag = Gtk.FileChooserDialog('Save as', self.win,
+                        Gtk.FileChooserAction.SAVE,
+                        (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                        "Save", Gtk.ResponseType.OK))
+            save_diag.set_do_overwrite_confirmation(True)
+            resp = save_diag.run()
+            if resp == Gtk.ResponseType.OK:
+                fpath = save_diag.get_filename()
+                self.saved_fns = [0]
+                self.fstree_root.compute_aggr()
+                self.fns_tosave = self.fstree_root.aggr_attrib[0]
+                self.save_state_thr = threading.Thread(target= save_state, args = (fpath,self.fstree_root,self.saved_fns))
+                self.save_state_thr.start()
+                self.spinner.start()
+                self.status_label.set_text('Saving state...')
+                GObject.timeout_add(500,self.check_save_state)
+            save_diag.destroy()
+            
+        else:
+            dialog = Gtk.MessageDialog(self.win, 0, Gtk.MessageType.ERROR,
+                Gtk.ButtonsType.OK, "MD5 computation is still running. Stop it before saving.")
+            dialog.run()
+            dialog.destroy()
+
+    def check_save_state(self):
+        """Periodically check saving progress"""
+        self.pbar.set_fraction(float(self.saved_fns[0])/self.fns_tosave)
+        if self.save_state_thr.is_alive():
+            #Nothing to do. Come back later
+            return True
+        else:
+            #Thread finished!
+            self.spinner.stop()
+            self.status_label.set_text('Saving state done.')
+            return False
+
 
     def update_repeated(self):
         """Append to model repeated files recently found."""

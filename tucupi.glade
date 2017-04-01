@@ -17,6 +17,9 @@
     <property name="short_label" translatable="yes">Mark others</property>
     <signal name="activate" handler="on_action_mark_others_activate" swapped="no"/>
   </object>
+  <object class="GtkAction" id="action_save_state">
+    <signal name="activate" handler="on_action_save_state_activate" swapped="no"/>
+  </object>
   <object class="GtkAction" id="action_unkeep_all">
     <property name="label" translatable="yes">Allow all files to be deleted</property>
     <property name="short_label" translatable="yes">Unkeep all</property>
@@ -156,6 +159,17 @@
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
                         <signal name="activate" handler="open" swapped="no"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="imagemenuitem1">
+                        <property name="label">gtk-save</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">action_save_state</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="use_underline">True</property>
+                        <property name="use_stock">True</property>
                       </object>
                     </child>
                     <child>
