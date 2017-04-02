@@ -595,7 +595,7 @@ def make_fstree(find_output, tree_root, sizes , same_size):
     """Update the root FSTree with an output of the 'find' run. For 
     every file, add its size to the sizes dict. If the file's size was
     already seen, add that size set of sizes with more than one file. In 
-    the and, update aggregates in FSTree."""
+    the end, update aggregates in FSTree."""
     files = find_output.split(b'\x00')
     for k in files[:-1]:
         resp = k.partition(b' ')#An espace separates the size from the path
@@ -636,7 +636,31 @@ def save_state(fpath, fstree, saved_fns):
         pickle.dump(total_fns, f)
         fstree.pickle_fnode(f,saved_fns)
 
-        
+def restore_state(fpath, fstree, rep_files, restored_fns, sizes, same_size):
+    with open(fpath, 'rb') as f:
+        fns_torestore = pickle.load(f)
+        while True:
+            try:
+                fn_data = pickle.load(f)
+            except EOFError:
+                if restored_fns[0] != fns_torestore:
+                    print('Incomplete state restoration.')
+                return
+            fn = FNode(None, None)
+            fn.set_state(fn_data)
+            if not fstree.add_leaf(fn.fpath, fn):
+                raise ValueError('State file includes repeated entry in file system.')
+            if fn.size in sizes:
+                sizes[fn.size].append(fn)
+                same_size.add(fn.size)
+            else:
+                sizes[fn.size] = [fn]
+                
+            if fn.size > 0 and fn.md5 is not None:
+                rep_files.add_fn(fn)
+            restored_fns[0] += 1
+
+                
  
         
 class UI(object):
@@ -662,6 +686,8 @@ class UI(object):
         
         self.open_diag = None
         self.finder_result = None
+        self.repeated_tree_store = None
+        self.fs_list_store = None
         self.clear_data()
         self.md5_working = []
         self.md5_thr = None
@@ -774,6 +800,10 @@ class UI(object):
         self.same_size = set()
         self.rep_files = RepFile()
         self.md5_todo = []
+        if self.repeated_tree_store  is not None:
+            self.repeated_tree_store.clear()
+        if self.fs_list_store is not None:
+            self.fs_list_store.clear()
 
 
 
@@ -911,6 +941,33 @@ class UI(object):
                 #We are finished!
                 return False
 
+    def restore_md5list(self):
+        """Compute list of files to perform md5sum.
+        
+        Files with the same size are added from largest to smallest. 
+        Correctly treat files whose MD5 was already computed. If 
+        empty files are present, they are added directly to the repeated
+        files dictionary. Add a timeout function to control and check
+        the progress of md5sum computation. 
+        """
+        untreated = []
+        for s in sorted(self.same_size,reverse=True):
+            untreated.clear()
+            while len(self.sizes[s]) > 0:
+                fn = self.sizes[s].pop(0)
+                if s > 0 and s < self.max_filesize:
+                    if fn.md5 is None:
+                        self.md5_todo.append(fn)
+                else:
+                    untreated.append(fn)
+            self.sizes[s].extend(untreated)
+            
+        if 0 in self.sizes:
+            self.rep_files.add_empty(self.sizes[0])
+        
+        #print('To compute md5 of {} files totaling {}'.format(len(self.md5_todo),human_size(sum([x.size for x in self.md5_todo]))))
+        return False
+
 
     def on_action_save_state_activate(self,action,*args):
         """Open widget to select a file to save the present state."""
@@ -949,6 +1006,70 @@ class UI(object):
             #Thread finished!
             self.spinner.stop()
             self.status_label.set_text('Saving state done.')
+            return False
+
+    def on_action_restore_state_activate(self,action,*args):
+        """Open widget to select a file with saved state to restore."""
+        if self.md5_thr is None:
+            restore_diag = Gtk.FileChooserDialog('Select state file', self.win,
+                    Gtk.FileChooserAction.OPEN,
+                    (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
+                    "Open", Gtk.ResponseType.OK))
+            resp = restore_diag.run()
+            if resp == Gtk.ResponseType.OK:
+                fpath = restore_diag.get_filename()
+                f = open(fpath, 'rb')
+                try:
+                    self.fns_torestore = pickle.load(f)
+                    if type(self.fns_torestore) is not np.int64 or self.fns_torestore <= 0:
+                        raise ValueError('Improper value stored in state file')
+                except Exception as ex:
+                    restore_diag.destroy()
+                    dialog = Gtk.MessageDialog(self.win, 0, Gtk.MessageType.ERROR,
+                        Gtk.ButtonsType.OK, "Restoring state failed.")
+                    dialog.format_secondary_text('{0}'.format(ex))
+                    dialog.run()
+                    dialog.destroy()
+                    raise
+                else:
+                    #File seems good so far. Let us just proceed and hope for the best
+                    self.clear_data()
+                    self.restored_fns = [0]
+                    self.restore_state_thr = threading.Thread(target= restore_state, args = (fpath,self.fstree_root,self.rep_files, self.restored_fns,self.sizes,self.same_size))
+                    self.restore_state_thr.start()
+                    self.spinner.start()
+                    self.status_label.set_text('Restoring state...')
+                    GObject.timeout_add(500,self.check_restore_state)
+                    restore_diag.destroy()
+                    
+                finally:
+                    f.close()
+            else:
+                restore_diag.destroy()
+        else:
+            dialog = Gtk.MessageDialog(self.win, 0, Gtk.MessageType.ERROR,
+                Gtk.ButtonsType.OK, "MD5 computation is still running. Stop it before restoring state.")
+            dialog.run()
+            dialog.destroy()
+
+    def check_restore_state(self):
+        """Periodically check restoring progress"""
+        self.pbar.set_fraction(float(self.restored_fns[0])/self.fns_torestore)
+        if self.restore_state_thr.is_alive():
+            #Nothing to do. Come back later
+            return True
+        else:
+            #Thread finished!
+            self.spinner.stop()
+            if self.restored_fns[0] == self.fns_torestore:
+                self.status_label.set_text('Restoring state done.')
+                self.shown_path = '/'.encode()
+                self.update_repeated()
+                self.fstree_root.compute_aggr()
+                self.update_path()
+                self.restore_md5list()
+            else:
+                self.status_label.set_text('Restoring state FAILED!')
             return False
 
 

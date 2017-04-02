@@ -17,6 +17,9 @@
     <property name="short_label" translatable="yes">Mark others</property>
     <signal name="activate" handler="on_action_mark_others_activate" swapped="no"/>
   </object>
+  <object class="GtkAction" id="action_restore_state">
+    <signal name="activate" handler="on_action_restore_state_activate" swapped="no"/>
+  </object>
   <object class="GtkAction" id="action_save_state">
     <signal name="activate" handler="on_action_save_state_activate" swapped="no"/>
   </object>
@@ -105,6 +108,11 @@
     <property name="can_focus">False</property>
     <property name="stock">gtk-media-next</property>
   </object>
+  <object class="GtkImage" id="image6">
+    <property name="visible">True</property>
+    <property name="can_focus">False</property>
+    <property name="stock">gtk-refresh</property>
+  </object>
   <object class="GtkImage" id="image_back">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
@@ -170,6 +178,17 @@
                         <property name="can_focus">False</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="imagemenuitem3">
+                        <property name="label">Restore</property>
+                        <property name="use_action_appearance">False</property>
+                        <property name="related_action">action_restore_state</property>
+                        <property name="visible">True</property>
+                        <property name="can_focus">False</property>
+                        <property name="image">image6</property>
+                        <property name="use_stock">False</property>
                       </object>
                     </child>
                     <child>
