@@ -19,7 +19,7 @@
 
 import threading
 
-from gi.repository import Gtk,GObject,GLib
+from gi.repository import Gtk,GObject,GLib,GdkPixbuf
 
 import sys
 import subprocess as sb
@@ -53,6 +53,56 @@ def human_size(s,precision = 2):
 def col_human(tree_column, cell, tree_model, titer, col):
     size = tree_model[titer][col]
     cell.set_property('text',human_size(size))
+
+
+
+class MySpinner(Gtk.Image):
+    """Quick and dirty spinner widget to reduce CPU usage"""
+    def __init__(self):
+        Gtk.Widget.__init__(self)
+
+
+        self.time_out_delay = 200
+        self.frame = 0
+        self.width = 22
+        self.height = 22
+        self.animate = False
+        self.big_pix = GdkPixbuf.Pixbuf.new_from_file('spinner22x22.png')
+        self.nframes = (self.big_pix.get_width() * self.big_pix.get_height()) // (self.width * self.height)
+        self.cols = self.big_pix.get_width() // self.width
+
+        self.sp = GdkPixbuf.Pixbuf.new(self.big_pix.get_colorspace(),
+                                        self.big_pix.get_has_alpha(),self.big_pix.get_bits_per_sample(),
+                                        self.width, self.height)
+        self.show_frame()
+
+    def start(self):
+        self.frame = 1
+        self.animate = True
+        GObject.timeout_add(self.time_out_delay,self.do_animate)
+
+    def stop(self):
+        self.animate = False
+
+    def show_frame(self):
+        posx = (self.frame % self.cols ) * self.width
+        posy = (self.frame // self.cols) * self.height
+        self.big_pix.copy_area(posx,posy,self.width,self.height,self.sp,0,0)
+        self.set_from_pixbuf(self.sp)
+
+    def do_animate(self):
+        if not self.animate:
+            self.frame = 0
+            self.show_frame()
+            return False
+        else:
+            self.show_frame()
+            #Goes from 1 to self.nframes - 1 and back to 1
+            self.frame = (self.frame + 1) % (self.nframes -1 ) + 1
+            return True
+
+
+
 
 
 
@@ -679,7 +729,10 @@ class UI(object):
         self.max_filesize = 2**int(self.scale.get_value())
         self.pbar = self.builder.get_object('progressbar')
         self.status_label = self.builder.get_object('status_label')
-        self.spinner = self.builder.get_object('spinner')
+        self.spinner = MySpinner()
+        box = self.builder.get_object('box3')
+        box.pack_start(self.spinner, False ,False, 0)
+        box.reorder_child(self.spinner,0)
         self.hide_processed_button = self.builder.get_object('hide_processed_button')
         self.page_adjustment = self.builder.get_object('page_adjustment')
 
