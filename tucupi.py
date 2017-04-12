@@ -672,7 +672,7 @@ def compute_md5(fnlist,rep_files):
     md5proc = sb.Popen(os.path.join(main_dir, b'tucupi_md5'),stdin=sb.PIPE,stdout=sb.PIPE)
     r = md5proc.stdout.readline()
     if r != b'tucupi_md5sum\n':
-        raise ValueError('Wrong responce from md5 compute executeble')
+        raise ValueError('Wrong responce from md5 compute executable')
     while(len(fnlist)>0):
         fn = fnlist.pop(0)
         if fn.md5 is None:
@@ -872,21 +872,25 @@ class UI(object):
 
     def open(self,widget,*args):
         """Open widget to select a folder to scan."""
-        self.open_diag = Gtk.FileChooserDialog('Select a folder', self.win,
+        open_diag = Gtk.FileChooserDialog('Select a folder', self.win,
                 Gtk.FileChooserAction.SELECT_FOLDER,
                 (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                 "Select", Gtk.ResponseType.OK))
-        self.open_diag.set_create_folders(False)
-        resp = self.open_diag.run()
+        open_diag.set_create_folders(False)
+        launch_scan = False
+        resp = open_diag.run()
         if resp == Gtk.ResponseType.OK:
-            self.scan_path()
+            launch_scan = True
+            diag_filepath = open_diag.get_filename()
 
-        self.open_diag.destroy()
+        open_diag.destroy()
+        if launch_scan:
+            self.scan_path(diag_filepath)
         
         
-    def scan_path(self):
+    def scan_path(self, filepath):
         """Instanciate and start finder class, add check_finder to timeout."""
-        path = self.open_diag.get_filename()
+        path = filepath
         #TODO: Temporary solution to utf errors
         self.shown_path = path.encode()
         self.finder_thr = Finder(path)
