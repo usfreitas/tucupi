@@ -22,6 +22,8 @@ import threading
 from gi.repository import Gtk,GObject,GLib,GdkPixbuf
 
 import sys
+import os
+import os.path
 import subprocess as sb
 import numpy as np
 
@@ -667,18 +669,26 @@ def make_fstree(find_output, tree_root, sizes , same_size):
 def compute_md5(fnlist,rep_files):
     """Compute md5 from every file in fnlist. Do not recompute md5 from
     files already analized."""
+    md5proc = sb.Popen(os.path.join(main_dir, b'tucupi_md5'),stdin=sb.PIPE,stdout=sb.PIPE)
+    r = md5proc.stdout.readline()
+    if r != b'tucupi_md5sum\n':
+        raise ValueError('Wrong responce from md5 compute executeble')
     while(len(fnlist)>0):
         fn = fnlist.pop(0)
         if fn.md5 is None:
             try:
-                md5 = sb.check_output(['md5sum',fn.fpath])
-                md5 = md5[:32]
-            except sb.CalledProcessError:
+                md5proc.stdin.write(fn.fpath+b'\x00')
+                md5proc.stdin.flush()
+                md5 = md5proc.stdout.readline()
+                md5 = md5[:-1]
+            except sb.SubProcessError:
                 md5 = b'Not found'
             
             fn.md5 = md5
             rep_files.add_fn(fn)
-            
+    md5proc.stdin.close()
+    md5proc.wait()
+    
 def save_state(fpath, fstree, saved_fns):
 
     total_fns = fstree.aggr_attrib[0]
@@ -1398,6 +1408,12 @@ class UI(object):
 
 
 if __name__ == '__main__':
+    head, tail = os.path.split(sys.argv[0].encode())
+
+    if head.startswith(b'/'):
+        main_dir = head
+    else:
+        main_dir = os.path.normpath(os.path.join(os.getcwdb(),head ))
     
     GObject.threads_init()
 
