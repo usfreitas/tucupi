@@ -29,6 +29,7 @@ import numpy as np
 
 import math
 import pickle
+import shlex
 
 from xml.dom.minidom import getDOMImplementation
 impl = getDOMImplementation()
@@ -109,14 +110,16 @@ class MySpinner(Gtk.Image):
 
 
 class Finder(threading.Thread):
-    def __init__(self,path):
+    def __init__(self,path, find_extra_opt):
         threading.Thread.__init__(self)
         self.result = None
-        self.path = path
+        self.cmd = ['find', path ]
+        self.cmd.extend(find_extra_opt)
+        self.cmd.extend( ['-type', 'f','-printf', '%s %h/%f\\0'])
 
     def run(self):
         try:
-            self.result = sb.check_output(['find', self.path, '-type', 'f','-printf', '%s %h/%f\\0'])
+            self.result = sb.check_output(self.cmd)
         except sb.CalledProcessError as err:
             print('Error in find!')
             self.result = err.output
@@ -745,6 +748,10 @@ class UI(object):
         box.reorder_child(self.spinner,0)
         self.hide_processed_button = self.builder.get_object('hide_processed_button')
         self.page_adjustment = self.builder.get_object('page_adjustment')
+        self.pref_window = self.builder.get_object('pref_window')
+        self.pref_window.connect('delete-event', self.on_pref_window_delete)
+        self.find_opt_entry = self.builder.get_object('find_opt_entry')
+        self.find_extra_opt = []
 
         
         self.open_diag = None
@@ -893,7 +900,7 @@ class UI(object):
         path = filepath
         #TODO: Temporary solution to utf errors
         self.shown_path = path.encode()
-        self.finder_thr = Finder(path)
+        self.finder_thr = Finder(path, self.find_extra_opt)
         self.finder_thr.start()
         GObject.timeout_add(100,self.check_finder)
         self.path = path
@@ -1321,6 +1328,7 @@ class UI(object):
         self.goto_page(None)
         self.update_path()
 
+        
     def on_action_mark_others_activate(self,action, data = None):
         model,selection = self.selection_right.get_selected_rows()
         for titer in selection:
@@ -1333,6 +1341,18 @@ class UI(object):
                 fn = self.fstree_root.get_branch(self.shown_path).get_index(ind)
                 self.rep_files.mark_others(fn)
         self.on_action_unmark_all_activate(action, data)
+
+    def on_action_preferences_activate(self, action, data = None):
+        self.pref_window.show_all()
+
+    def on_pref_window_delete(self, event, data = None):
+        opt_text = self.find_opt_entry.get_text() 
+        parsed = shlex.split(opt_text)
+        print('pref delete! Entry:', opt_text, '\nparsed:', parsed)
+        self.find_extra_opt = parsed
+        self.pref_window.hide()
+        return True
+
 
     def on_page_adjustment_value_changed(self,adj,data=None):
         #print('Page changed!',self.page_adjustment.get_value())
