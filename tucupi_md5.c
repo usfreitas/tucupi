@@ -610,14 +610,19 @@ int main(int argc, char** argv)
         printf("\n");
         fflush(stdout);
       }
-      else
-        printf("error_md5\n");
-        fflush(stdout);
+      else 
+        {
+            printf("error_md5\n");
+            fflush(stdout);
+        }
+	
       fclose(fp);
     }
     else
-      printf("error_md5\n");
-      fflush(stdout);
+        {
+            printf("error_md5\n");
+            fflush(stdout);
+        }
   }
   
   printf("Bye!\n");

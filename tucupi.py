@@ -19,6 +19,8 @@
 
 import threading
 
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk,GObject,GLib,GdkPixbuf
 
 import sys
@@ -82,7 +84,7 @@ class MySpinner(Gtk.Image):
     def start(self):
         self.frame = 1
         self.animate = True
-        GObject.timeout_add(self.time_out_delay,self.do_animate)
+        GLib.timeout_add(self.time_out_delay,self.do_animate)
 
     def stop(self):
         self.animate = False
@@ -778,7 +780,7 @@ class UI(object):
         ts = Gtk.TreeStore(str,GObject.TYPE_INT64,bool,bool,int)
         
         
-        self.tv_left = Gtk.TreeView(ts)
+        self.tv_left = Gtk.TreeView(model=ts)
         renderer = Gtk.CellRendererText()
         col = Gtk.TreeViewColumn('Size',renderer,text = 1)
         col.set_cell_data_func(renderer,col_human,1)
@@ -807,7 +809,7 @@ class UI(object):
     def init_right_tree(self):
         store = Gtk.ListStore(str, str, int,GObject.TYPE_INT64, int,GObject.TYPE_INT64,int,int,int)
         
-        tree = Gtk.TreeView(store)
+        tree = Gtk.TreeView(model=store)
 
         name_renderer = Gtk.CellRendererText()
         icon_renderer = Gtk.CellRendererPixbuf()
@@ -879,10 +881,10 @@ class UI(object):
 
     def open(self,widget,*args):
         """Open widget to select a folder to scan."""
-        open_diag = Gtk.FileChooserDialog('Select a folder', self.win,
-                Gtk.FileChooserAction.SELECT_FOLDER,
-                (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                "Select", Gtk.ResponseType.OK))
+        open_diag = Gtk.FileChooserDialog(title='Select a folder', 
+                parent=self.win,
+                action=Gtk.FileChooserAction.SELECT_FOLDER)
+        open_diag.add_buttons("Select", Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
         open_diag.set_create_folders(False)
         launch_scan = False
         resp = open_diag.run()
@@ -902,7 +904,7 @@ class UI(object):
         self.shown_path = path.encode()
         self.finder_thr = Finder(path, self.find_extra_opt)
         self.finder_thr.start()
-        GObject.timeout_add(100,self.check_finder)
+        GLib.timeout_add(100,self.check_finder)
         self.path = path
         print('Scanning path',path)
     
@@ -946,7 +948,7 @@ class UI(object):
         if 0 in self.sizes:
             self.rep_files.add_empty(self.sizes[0])
         
-        GObject.timeout_add(500,self.check_md5_progress)
+        GLib.timeout_add(500,self.check_md5_progress)
         #print('To compute md5 of {} files totaling {}'.format(len(self.md5_todo),human_size(sum([x.size for x in self.md5_todo]))))
         return False
     
@@ -1061,7 +1063,7 @@ class UI(object):
                 self.save_state_thr.start()
                 self.spinner.start()
                 self.status_label.set_text('Saving state...')
-                GObject.timeout_add(500,self.check_save_state)
+                GLib.timeout_add(500,self.check_save_state)
             save_diag.destroy()
             
         else:
@@ -1113,7 +1115,7 @@ class UI(object):
                     self.restore_state_thr.start()
                     self.spinner.start()
                     self.status_label.set_text('Restoring state...')
-                    GObject.timeout_add(500,self.check_restore_state)
+                    GLib.timeout_add(500,self.check_restore_state)
                     restore_diag.destroy()
                     
                 finally:
@@ -1236,7 +1238,7 @@ class UI(object):
         print('on_continue')
         self.stop = False 
         if self.md5_thr is None:
-            GObject.timeout_add(500,self.check_md5_progress)
+            GLib.timeout_add(500,self.check_md5_progress)
     
     def on_hide_processed_button_toggled(self,widget, data = None):
         self.hide_processed_filter = widget.get_active()
@@ -1374,10 +1376,10 @@ class UI(object):
             return False
     
     def delete_marked(self,widget,*args):
-        save_diag = Gtk.FileChooserDialog('Save as', self.win,
-                    Gtk.FileChooserAction.SAVE,
-                    (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-                    "Save", Gtk.ResponseType.OK))
+        save_diag = Gtk.FileChooserDialog(title='Save as', 
+                parent=self.win,
+                action=Gtk.FileChooserAction.SAVE)
+        save_diag.add_buttons("Save", Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
         save_diag.set_do_overwrite_confirmation(True)
         resp = save_diag.run()
         if resp == Gtk.ResponseType.OK:
@@ -1418,9 +1420,8 @@ class UI(object):
 
 
     def quit(self,widget,*args):
-        diag = Gtk.Dialog( "Realy Quit?", self.win, 0,
-            (Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
-             Gtk.STOCK_OK, Gtk.ResponseType.OK))
+        diag = Gtk.Dialog( "Realy Quit?", self.win, 0)
+        diag.add_buttons(Gtk.STOCK_OK, Gtk.ResponseType.OK, Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL)
         resp = diag.run()
         diag.destroy()
         if resp == Gtk.ResponseType.OK:
@@ -1439,7 +1440,6 @@ if __name__ == '__main__':
     else:
         main_dir = os.path.normpath(os.path.join(os.getcwdb(),head ))
     
-    GObject.threads_init()
 
     ui = UI()
     Gtk.main()
