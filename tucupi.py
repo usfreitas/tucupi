@@ -130,6 +130,7 @@ class Finder(threading.Thread):
 
 class FNode(object):
     """Class to hold file specific data and state."""
+    __slots__ = ('fpath', 'md5', 'size', 'marked', 'kept', 'repeated')
     def __init__(self,fpath,size):
         self.fpath = fpath
         self.md5 = None
